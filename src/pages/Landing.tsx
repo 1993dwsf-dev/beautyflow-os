@@ -11,15 +11,12 @@ import { motion } from "framer-motion";
 import {
   ArrowRight,
   BadgeCheck,
-  BarChart3,
   Bell,
   CalendarDays,
   CircleDollarSign,
   Clock,
   CreditCard,
-  Gift,
   HeartHandshake,
-  Image as ImageIcon,
   LineChart,
   ListChecks,
   Lock,
@@ -27,7 +24,6 @@ import {
   Receipt,
   ShieldCheck,
   Sparkles,
-  Star,
   TrendingUp,
   Users,
   Wand2,
@@ -35,66 +31,12 @@ import {
 import { Link } from "react-router";
 
 const MODULES = [
-  {
-    icon: <CalendarDays className="size-5" />,
-    title: "Agenda inteligente",
-    text: "Visões de dia, semana e mês, prevenção de conflitos, buffer entre atendimentos e lista de espera com encaixe manual.",
-  },
-  {
-    icon: <Users className="size-5" />,
-    title: "CRM de clientes",
-    text: "Ficha completa, histórico de atendimentos, preferências, tags, origem de indicação e valor gasto calculado no caixa.",
-  },
-  {
-    icon: <HeartHandshake className="size-5" />,
-    title: "Prontuário e consentimento",
-    text: "Fórmulas, reações relatadas, cuidados pós-atendimento e consentimentos separados por finalidade.",
-  },
-  {
-    icon: <ImageIcon className="size-5" />,
-    title: "Antes e depois",
-    text: "Fotos em armazenamento privado, comparação lado a lado e liberação de divulgação apenas com autorização.",
-  },
-  {
-    icon: <Sparkles className="size-5" />,
-    title: "Catálogo e pacotes",
-    text: "Preço, duração, custo de material, comissão, sinal e profissionais elegíveis por serviço. Combos e pacotes.",
-  },
-  {
-    icon: <Receipt className="size-5" />,
-    title: "Faturas e recibos",
-    text: "Itens, descontos, sinal aplicado, saldo em aberto e bloqueio de edição após a quitação.",
-  },
-  {
-    icon: <CreditCard className="size-5" />,
-    title: "Pagamentos e sinais",
-    text: "PIX, dinheiro, débito, crédito e transferência. Pagamentos parciais, estornos auditáveis e sinais sem duplicidade.",
-  },
-  {
-    icon: <CircleDollarSign className="size-5" />,
-    title: "Comissões",
-    text: "Regras por serviço, profissional ou global, com base configurada e extrato separando comissão estimada, ganha e paga.",
-  },
-  {
-    icon: <Package className="size-5" />,
-    title: "Estoque real",
-    text: "Entradas, vendas, perdas e consumo por serviço com movimentação registrada — nada muda de saldo sem histórico.",
-  },
-  {
-    icon: <TrendingUp className="size-5" />,
-    title: "Retenção",
-    text: "Quem está com retorno previsto, atrasado ou inativa, com tarefas de acompanhamento e mensagens prontas.",
-  },
-  {
-    icon: <Gift className="size-5" />,
-    title: "Fidelidade e presentes",
-    text: "Extrato de pontos auditável, recompensas e cartões-presente com política de reconhecimento documentada.",
-  },
-  {
-    icon: <BarChart3 className="size-5" />,
-    title: "Relatórios e CSV",
-    text: "Operacional, financeiro, clientes e estoque por período, com exportação para conferência contábil.",
-  },
+  { icon: <CalendarDays className="size-5" />, title: "Agenda", text: "Dia, semana e mês, sem conflito de horário." },
+  { icon: <Users className="size-5" />, title: "Clientes", text: "Ficha, histórico e preferências." },
+  { icon: <HeartHandshake className="size-5" />, title: "Fichas", text: "Prontuário, consentimento e antes/depois." },
+  { icon: <Sparkles className="size-5" />, title: "Catálogo", text: "Serviços, pacotes, preço e comissão." },
+  { icon: <Receipt className="size-5" />, title: "Financeiro", text: "Faturas, sinais, pagamentos e despesas." },
+  { icon: <TrendingUp className="size-5" />, title: "Retenção", text: "Retornos, fidelidade e estoque." },
 ];
 
 const JOURNEY = [
@@ -129,62 +71,6 @@ const PRINCIPLES = [
     icon: <ListChecks className="size-5" />,
     title: "Multi-tenant de verdade",
     text: "Cada salão, studio ou profissional autônoma tem registros isolados, com papéis, módulos e marca próprios.",
-  },
-];
-
-const PLANS = [
-  {
-    name: "Essencial",
-    price: "R$ 79",
-    hint: "por mês · profissional autônoma",
-    features: [
-      "Agenda e agenda online pública",
-      "CRM de clientes e histórico",
-      "Catálogo de serviços e pacotes",
-      "Faturas, pagamentos e sinais",
-    ],
-  },
-  {
-    name: "Studio",
-    price: "R$ 149",
-    hint: "por mês · salão com equipe",
-    highlight: true,
-    features: [
-      "Tudo do Essencial",
-      "Equipe, escalas e comissões",
-      "Estoque com consumo por serviço",
-      "Despesas, fluxo de caixa e relatórios",
-      "Fidelidade, cartões-presente e campanhas",
-    ],
-  },
-  {
-    name: "Multi-unidade",
-    price: "R$ 289",
-    hint: "por mês · rede ou estúdios",
-    features: [
-      "Tudo do Studio",
-      "Vários espaços por usuário",
-      "Permissões avançadas por papel",
-      "Exportações completas e auditoria",
-    ],
-  },
-];
-
-const TESTIMONIALS = [
-  {
-    quote:
-      "Antes eu controlava sinal em caderno e às vezes cobrava duas vezes. Agora o sinal entra na fatura e o saldo aparece certinho.",
-    author: "Studio de cílios · São Paulo",
-  },
-  {
-    quote:
-      "A lista de espera e o alerta de retorno mudaram o meu mês: consigo chamar quem está atrasada sem depender da memória.",
-    author: "Cabeleireira autônoma · Belo Horizonte",
-  },
-  {
-    quote:
-      "O consumo de produto por serviço finalmente mostrou quais procedimentos dão margem de verdade.",
-    author: "Salão com quatro profissionais · Curitiba",
   },
 ];
 
@@ -243,9 +129,6 @@ export default function Landing() {
           </a>
           <a href="#principios" className="transition hover:text-foreground">
             Como pensamos
-          </a>
-          <a href="#planos" className="transition hover:text-foreground">
-            Planos
           </a>
           <a href="#duvidas" className="transition hover:text-foreground">
             Dúvidas
@@ -402,7 +285,7 @@ export default function Landing() {
       <section className="mx-auto w-full max-w-[76rem] px-5 py-10">
         <div className="glass grid gap-4 rounded-3xl p-6 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            ["12", "módulos conectados no mesmo fluxo"],
+            ["6", "áreas conectadas no mesmo fluxo"],
             ["6", "papéis de acesso com permissões granulares"],
             ["10", "conjuntos de dados para exportar em CSV"],
             ["18", "funcionalidades controladas por feature flag"],
@@ -425,8 +308,7 @@ export default function Landing() {
             Um sistema operacional para o seu studio
           </h2>
           <p className="mt-3 text-sm leading-6 text-muted-foreground">
-            Cada módulo conversa com os outros: o serviço concluído gera prontuário, fatura,
-            comissão, baixa de estoque e o próximo retorno da cliente.
+            Tudo conectado: o atendimento concluído gera ficha, fatura e o próximo retorno.
           </p>
         </div>
 
@@ -438,13 +320,15 @@ export default function Landing() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: "-60px" }}
               transition={{ duration: 0.35, delay: index * 0.03 }}
-              className="glass glass-hover rounded-2xl p-5"
+              className="glass glass-hover flex items-start gap-3 rounded-2xl p-4"
             >
-              <span className="inline-flex size-10 items-center justify-center rounded-xl bg-white/70 text-primary">
+              <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/70 text-primary">
                 {module.icon}
               </span>
-              <p className="mt-3 text-sm font-semibold">{module.title}</p>
-              <p className="mt-1.5 text-xs leading-5 text-muted-foreground">{module.text}</p>
+              <span className="min-w-0">
+                <p className="text-sm font-semibold">{module.title}</p>
+                <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{module.text}</p>
+              </span>
             </motion.div>
           ))}
         </div>
@@ -531,77 +415,6 @@ export default function Landing() {
       </section>
 
       {/* ------------------------------------------------------------------ */}
-      <section className="mx-auto w-full max-w-[76rem] px-5 py-12">
-        <div className="grid gap-4 sm:grid-cols-3">
-          {TESTIMONIALS.map((item) => (
-            <div key={item.author} className="glass rounded-2xl p-5">
-              <div className="flex gap-0.5 text-amber-500">
-                {Array.from({ length: 5 }).map((_, index) => (
-                  <Star key={index} className="size-3.5" fill="currentColor" />
-                ))}
-              </div>
-              <p className="mt-3 text-sm leading-6 text-foreground/85">“{item.quote}”</p>
-              <p className="mt-3 text-xs text-muted-foreground">{item.author}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ------------------------------------------------------------------ */}
-      <section id="planos" className="mx-auto w-full max-w-[76rem] px-5 py-12">
-        <div className="max-w-2xl">
-          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-primary/80">
-            Planos
-          </p>
-          <h2 className="mt-2 text-3xl font-semibold tracking-tight">
-            Preços de referência por tamanho de operação
-          </h2>
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">
-            Os módulos são habilitados por organização e aplicados no servidor. A cobrança
-            da assinatura ainda é feita manualmente — nenhuma cobrança automática é
-            executada sem um gateway configurado.
-          </p>
-        </div>
-
-        <div className="mt-8 grid gap-4 lg:grid-cols-3">
-          {PLANS.map((plan) => (
-            <div
-              key={plan.name}
-              className={
-                plan.highlight
-                  ? "glass-strong relative rounded-3xl p-6 ring-2 ring-primary/30"
-                  : "glass rounded-3xl p-6"
-              }
-            >
-              {plan.highlight && (
-                <Badge className="absolute -top-3 left-6 border-0 bg-primary text-white">
-                  Mais escolhido
-                </Badge>
-              )}
-              <p className="text-sm font-semibold">{plan.name}</p>
-              <p className="mt-3 text-3xl font-semibold tracking-tight">{plan.price}</p>
-              <p className="mt-1 text-xs text-muted-foreground">{plan.hint}</p>
-              <ul className="mt-5 space-y-2">
-                {plan.features.map((feature) => (
-                  <li key={feature} className="flex items-start gap-2 text-xs leading-5">
-                    <BadgeCheck className="mt-0.5 size-3.5 shrink-0 text-primary" />
-                    {feature}
-                  </li>
-                ))}
-              </ul>
-              <Button
-                className="mt-6 w-full"
-                variant={plan.highlight ? "default" : "outline"}
-                asChild
-              >
-                <Link to="/auth?returnTo=%2Fonboarding">Criar meu espaço</Link>
-              </Button>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ------------------------------------------------------------------ */}
       <section id="duvidas" className="mx-auto w-full max-w-[56rem] px-5 py-12">
         <div className="glass rounded-3xl p-6 sm:p-8">
           <h2 className="text-2xl font-semibold tracking-tight">Dúvidas frequentes</h2>
@@ -672,11 +485,6 @@ export default function Landing() {
                 <li>
                   <a className="transition hover:text-foreground" href="#jornada">
                     Jornada do atendimento
-                  </a>
-                </li>
-                <li>
-                  <a className="transition hover:text-foreground" href="#planos">
-                    Planos
                   </a>
                 </li>
               </ul>

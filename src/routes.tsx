@@ -3,7 +3,7 @@ import { AppShell } from "@/components/AppShell";
 import { LoadingBlock } from "@/components/glass";
 import { RequireAuth } from "@/components/RequireAuth";
 import { lazy, Suspense, type ReactNode } from "react";
-import { Navigate, Route, Routes, useLocation } from "react-router";
+import { Navigate, Outlet, Route, Routes, useLocation } from "react-router";
 
 const Landing = lazy(() => import("./pages/Landing.tsx"));
 const AuthPage = lazy(() => import("./pages/Auth.tsx"));
@@ -140,6 +140,23 @@ function AppWorkspace({ children }: { children: ReactNode }) {
   return <AppShell>{children}</AppShell>;
 }
 
+/**
+ * All signed-in product routes share one layout so the organization context
+ * stays mounted while navigating. Every route below `/app` must be rendered
+ * inside this provider — otherwise screens that call `useApp` crash.
+ */
+function WorkspaceLayout() {
+  return (
+    <RequireAuth redirectImmediately title="Entre para acessar o BeautyFlow OS">
+      <AppProvider>
+        <AppWorkspace>
+          <Outlet />
+        </AppWorkspace>
+      </AppProvider>
+    </RequireAuth>
+  );
+}
+
 export function AppRoutes() {
   return (
     <Suspense fallback={<RouteLoading />}>
@@ -160,61 +177,48 @@ export function AppRoutes() {
           }
         />
 
-        <Route
-          path="/app"
-          element={
-            <RequireAuth redirectImmediately title="Entre para acessar o BeautyFlow OS">
-              <AppProvider>
-                <AppWorkspace>
-                  <Dashboard />
-                </AppWorkspace>
-              </AppProvider>
-            </RequireAuth>
-          }
-        />
+        <Route element={<WorkspaceLayout />}>
+          <Route path="/app" element={<Dashboard />} />
 
-        {[
-          { path: "/app/agenda", element: <Agenda /> },
-          { path: "/app/lista-espera", element: <Waitlist /> },
-          { path: "/app/alertas", element: <Alerts /> },
-          { path: "/app/clientes", element: <Clients /> },
-          { path: "/app/clientes/:clientId", element: <ClientDetail /> },
-          { path: "/app/historico", element: <TreatmentHistory /> },
-          { path: "/app/fichas", element: <PatientRecords /> },
-          { path: "/app/retornos", element: <Retention /> },
-          { path: "/app/fidelidade", element: <Loyalty /> },
-          { path: "/app/servicos", element: <Services /> },
-          { path: "/app/pacotes", element: <Packages /> },
-          { path: "/app/orcamentos", element: <Quotes /> },
-          { path: "/app/formularios", element: <Forms /> },
-          { path: "/app/recomendacoes", element: <Aftercare /> },
-          { path: "/app/fotos", element: <Photos /> },
-          { path: "/app/profissionais", element: <Staff /> },
-          { path: "/app/disponibilidade", element: <Availability /> },
-          { path: "/app/comissoes", element: <Commissions /> },
-          { path: "/app/desempenho", element: <Performance /> },
-          { path: "/app/faturas", element: <Invoices /> },
-          { path: "/app/pagamentos", element: <Payments /> },
-          { path: "/app/despesas", element: <Expenses /> },
-          { path: "/app/caixa", element: <Cashflow /> },
-          { path: "/app/produtos", element: <Products /> },
-          { path: "/app/movimentacoes", element: <Movements /> },
-          { path: "/app/fornecedores", element: <Suppliers /> },
-          { path: "/app/estoque-alertas", element: <StockAlerts /> },
-          { path: "/app/reagendamentos", element: <Retention /> },
-          { path: "/app/campanhas", element: <Campaigns /> },
-          { path: "/app/aniversarios", element: <Birthdays /> },
-          { path: "/app/cartoes-presente", element: <GiftCards /> },
-          { path: "/app/relatorios", element: <Reports /> },
-          { path: "/app/configuracoes", element: <Settings /> },
-          { path: "/app/auditoria", element: <Audit /> },
-        ].map((route) => (
-          <Route
-            key={route.path}
-            path={route.path}
-            element={<AppWorkspace>{route.element}</AppWorkspace>}
-          />
-        ))}
+          {[
+            { path: "/app/agenda", element: <Agenda /> },
+            { path: "/app/lista-espera", element: <Waitlist /> },
+            { path: "/app/alertas", element: <Alerts /> },
+            { path: "/app/clientes", element: <Clients /> },
+            { path: "/app/clientes/:clientId", element: <ClientDetail /> },
+            { path: "/app/historico", element: <TreatmentHistory /> },
+            { path: "/app/fichas", element: <PatientRecords /> },
+            { path: "/app/retornos", element: <Retention /> },
+            { path: "/app/fidelidade", element: <Loyalty /> },
+            { path: "/app/servicos", element: <Services /> },
+            { path: "/app/pacotes", element: <Packages /> },
+            { path: "/app/orcamentos", element: <Quotes /> },
+            { path: "/app/formularios", element: <Forms /> },
+            { path: "/app/recomendacoes", element: <Aftercare /> },
+            { path: "/app/fotos", element: <Photos /> },
+            { path: "/app/profissionais", element: <Staff /> },
+            { path: "/app/disponibilidade", element: <Availability /> },
+            { path: "/app/comissoes", element: <Commissions /> },
+            { path: "/app/desempenho", element: <Performance /> },
+            { path: "/app/faturas", element: <Invoices /> },
+            { path: "/app/pagamentos", element: <Payments /> },
+            { path: "/app/despesas", element: <Expenses /> },
+            { path: "/app/caixa", element: <Cashflow /> },
+            { path: "/app/produtos", element: <Products /> },
+            { path: "/app/movimentacoes", element: <Movements /> },
+            { path: "/app/fornecedores", element: <Suppliers /> },
+            { path: "/app/estoque-alertas", element: <StockAlerts /> },
+            { path: "/app/reagendamentos", element: <Retention /> },
+            { path: "/app/campanhas", element: <Campaigns /> },
+            { path: "/app/aniversarios", element: <Birthdays /> },
+            { path: "/app/cartoes-presente", element: <GiftCards /> },
+            { path: "/app/relatorios", element: <Reports /> },
+            { path: "/app/configuracoes", element: <Settings /> },
+            { path: "/app/auditoria", element: <Audit /> },
+          ].map((route) => (
+            <Route key={route.path} path={route.path} element={route.element} />
+          ))}
+        </Route>
 
         <Route path="*" element={<NotFound />} />
       </Routes>
