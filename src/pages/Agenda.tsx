@@ -31,7 +31,6 @@ import { errorMessage } from "@/lib/errors";
 import {
   APPOINTMENT_STATUS,
   APPOINTMENT_STATUS_COLOR,
-  PAYMENT_METHOD,
   PAYMENT_STATUS,
   addDays,
   durationLabel,
@@ -54,8 +53,6 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  CircleDollarSign,
-  Clock,
   History,
   Play,
   Receipt,
@@ -921,7 +918,6 @@ function AppointmentDetailDialog({
               <div key={record._id} className="mt-1 space-y-0.5 text-muted-foreground">
                 {record.formula && <p>Fórmula: {record.formula}</p>}
                 {record.notes && <p>Notas: {record.notes}</p>}
-                {record.aftercare && <p>Cuidados: {record.aftercare}</p>}
                 {record.nextVisitDate && (
                   <p>Retorno sugerido: {formatDate(record.nextVisitDate)}</p>
                 )}
@@ -1131,7 +1127,6 @@ function CompleteDialog({
   const [notes, setNotes] = useState("");
   const [formula, setFormula] = useState("");
   const [reactions, setReactions] = useState("");
-  const [aftercare, setAftercare] = useState("");
   const [interval, setInterval] = useState("30");
   const [createRecord, setCreateRecord] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1147,7 +1142,6 @@ function CompleteDialog({
         notes: notes || undefined,
         formula: formula || undefined,
         reactions: reactions || undefined,
-        aftercare: aftercare || undefined,
         nextVisitIntervalDays:
           interval && interval !== "none" ? Number(interval) : undefined,
         createTreatmentRecord: createRecord,
@@ -1215,10 +1209,6 @@ function CompleteDialog({
 
       <Field label="Reações observadas" hint="Somente o que a cliente relatou durante o atendimento.">
         <Textarea value={reactions} onChange={(e) => setReactions(e.target.value)} rows={2} />
-      </Field>
-
-      <Field label="Cuidados pós-atendimento">
-        <Textarea value={aftercare} onChange={(e) => setAftercare(e.target.value)} rows={2} />
       </Field>
 
       <Field

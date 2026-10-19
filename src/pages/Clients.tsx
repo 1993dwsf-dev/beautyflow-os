@@ -38,7 +38,6 @@ import {
   initials,
   label,
   money,
-  parseMoney,
   whatsappLink,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -55,7 +54,7 @@ import {
   Users,
 } from "lucide-react";
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 
 export default function Clients() {
@@ -372,15 +371,7 @@ function ClientDialog({
     referralSource: client?.referralSource ?? "",
     status: client?.status ?? "ativo",
     tags: (client?.tags ?? []).join(", "),
-    preferences: client?.preferences ?? "",
     notes: client?.notes ?? "",
-    cep: client?.address?.cep ?? "",
-    logradouro: client?.address?.logradouro ?? "",
-    numero: client?.address?.numero ?? "",
-    complemento: client?.address?.complemento ?? "",
-    bairro: client?.address?.bairro ?? "",
-    cidade: client?.address?.cidade ?? "",
-    estado: client?.address?.estado ?? "",
   });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -408,17 +399,7 @@ function ClientDialog({
         .map((tag: string) => tag.trim())
         .filter(Boolean),
       status: form.status,
-      preferences: form.preferences || undefined,
       notes: form.notes || undefined,
-      address: {
-        cep: form.cep || undefined,
-        logradouro: form.logradouro || undefined,
-        numero: form.numero || undefined,
-        complemento: form.complemento || undefined,
-        bairro: form.bairro || undefined,
-        cidade: form.cidade || undefined,
-        estado: form.estado || undefined,
-      },
     };
     try {
       if (client) {
@@ -442,7 +423,7 @@ function ClientDialog({
       onOpenChange={(value) => !value && onClose()}
       size="xl"
       title={client ? "Editar cliente" : "Nova cliente"}
-      description="Dados de contato e preferências. CPF é opcional e usado apenas quando necessário."
+      description="Dados de contato. CPF é opcional e usado apenas quando necessário."
       onSubmit={submit}
       loading={loading}
       error={error}
@@ -523,42 +504,6 @@ function ClientDialog({
         <Input value={form.tags} onChange={(e) => set("tags", e.target.value)} />
       </Field>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Field label="CEP">
-          <Input value={form.cep} onChange={(e) => set("cep", e.target.value)} />
-        </Field>
-        <Field label="Logradouro" className="sm:col-span-2">
-          <Input value={form.logradouro} onChange={(e) => set("logradouro", e.target.value)} />
-        </Field>
-        <Field label="Número">
-          <Input value={form.numero} onChange={(e) => set("numero", e.target.value)} />
-        </Field>
-        <Field label="Complemento">
-          <Input value={form.complemento} onChange={(e) => set("complemento", e.target.value)} />
-        </Field>
-        <Field label="Bairro">
-          <Input value={form.bairro} onChange={(e) => set("bairro", e.target.value)} />
-        </Field>
-        <Field label="Cidade">
-          <Input value={form.cidade} onChange={(e) => set("cidade", e.target.value)} />
-        </Field>
-        <Field label="Estado">
-          <Input
-            value={form.estado}
-            onChange={(e) => set("estado", e.target.value.toUpperCase().slice(0, 2))}
-            placeholder="SP"
-          />
-        </Field>
-      </div>
-
-      <Field label="Preferências">
-        <Textarea
-          value={form.preferences}
-          onChange={(e) => set("preferences", e.target.value)}
-          rows={2}
-          placeholder="Produtos preferidos, temperatura da água, conversa…"
-        />
-      </Field>
       <Field label="Observações gerais">
         <Textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} rows={2} />
       </Field>
@@ -585,14 +530,6 @@ export function ClientDetail() {
     orgId && clientId
       ? { orgId, clientId: clientId as Id<"clients"> }
       : "skip",
-  );
-  const responses = useQuery(
-    api.crm.listResponses,
-    orgId && clientId ? { orgId, clientId: clientId as Id<"clients"> } : "skip",
-  );
-  const photos = useQuery(
-    api.crm.listPhotos,
-    orgId && clientId ? { orgId, clientId: clientId as Id<"clients"> } : "skip",
   );
   const recordConsent = useMutation(api.crm.recordConsent);
   const deleteData = useMutation(api.clients.deleteClientData);
@@ -671,10 +608,7 @@ export function ClientDetail() {
             <TabsTrigger value="atendimentos">Atendimentos</TabsTrigger>
             <TabsTrigger value="fichas">Fichas de tratamento</TabsTrigger>
             <TabsTrigger value="financeiro">Financeiro</TabsTrigger>
-            <TabsTrigger value="formularios">Formulários</TabsTrigger>
             <TabsTrigger value="consentimentos">Consentimentos</TabsTrigger>
-            <TabsTrigger value="fotos">Antes e depois</TabsTrigger>
-            <TabsTrigger value="fidelidade">Fidelidade</TabsTrigger>
           </TabsList>
         </div>
 
@@ -691,12 +625,6 @@ export function ClientDetail() {
                   ["Nascimento", client.birthday ? formatDate(client.birthday) : "—"],
                   ["Contato preferido", client.preferredContact ?? "—"],
                   ["Origem", client.referralSource ?? "—"],
-                  [
-                    "Endereço",
-                    [client.address?.logradouro, client.address?.numero, client.address?.cidade]
-                      .filter(Boolean)
-                      .join(", ") || "—",
-                  ],
                 ].map(([term, value]) => (
                   <div key={term} className="flex justify-between gap-4 border-b border-white/50 pb-1.5 last:border-0">
                     <dt className="text-muted-foreground">{term}</dt>
@@ -714,11 +642,7 @@ export function ClientDetail() {
             </GlassCard>
 
             <GlassCard>
-              <SectionTitle title="Preferências e observações" />
-              <p className="text-sm text-muted-foreground">
-                {client.preferences ?? "Nenhuma preferência registrada."}
-              </p>
-              <div className="glass-rule my-3" />
+              <SectionTitle title="Observações e histórico" />
               <p className="text-sm text-muted-foreground">
                 {client.notes ?? "Nenhuma observação geral."}
               </p>
@@ -859,48 +783,6 @@ export function ClientDetail() {
           </div>
         </TabsContent>
 
-        <TabsContent value="formularios">
-          <GlassCard>
-            <SectionTitle
-              title="Formulários de consulta"
-              description="Informações sensíveis de saúde só aparecem para usuários autorizados."
-            />
-            {(responses ?? []).length === 0 && (
-              <p className="text-sm text-muted-foreground">
-                Nenhum formulário preenchido para esta cliente.
-              </p>
-            )}
-            <div className="space-y-3">
-              {(responses ?? []).map((response: any) => (
-                <div key={response._id} className="glass-inset rounded-xl p-3 text-sm">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline">v{response.formVersion}</Badge>
-                    <span className="font-medium">{response.formName}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {formatDate(response.date)} · {response.acknowledgedBy}
-                    </span>
-                  </div>
-                  {response.hidden ? (
-                    <p className="mt-2 text-xs text-amber-700">
-                      Conteúdo sensível oculto: sua função não possui permissão para ver
-                      informações de saúde.
-                    </p>
-                  ) : (
-                    <dl className="mt-2 space-y-1 text-xs">
-                      {response.answers.map((answer: any) => (
-                        <div key={answer.key} className="flex gap-2">
-                          <dt className="text-muted-foreground">{answer.label}:</dt>
-                          <dd>{answer.value}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                  )}
-                </div>
-              ))}
-            </div>
-          </GlassCard>
-        </TabsContent>
-
         <TabsContent value="consentimentos">
           <GlassCard>
             <SectionTitle
@@ -944,85 +826,6 @@ export function ClientDetail() {
           </GlassCard>
         </TabsContent>
 
-        <TabsContent value="fotos">
-          <GlassCard>
-            <SectionTitle
-              title="Antes e depois"
-              description="Imagens privadas por padrão. A divulgação exige consentimento específico."
-              action={
-                <Button size="sm" variant="outline" onClick={() => navigate("/app/fotos")}>
-                  Abrir galeria
-                </Button>
-              }
-            />
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {(photos ?? []).map((photo: any) => (
-                <div key={photo._id} className="glass-inset overflow-hidden rounded-xl">
-                  {photo.url ? (
-                    <img
-                      src={photo.url}
-                      alt={photo.notes ?? "Foto do atendimento"}
-                      className="h-32 w-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-32 items-center justify-center text-xs text-muted-foreground">
-                      Sem pré-visualização
-                    </div>
-                  )}
-                  <div className="px-2 py-1.5 text-[0.65rem]">
-                    <p className="font-medium capitalize">{photo.kind}</p>
-                    <p className="text-muted-foreground">{formatDate(photo.captureDate)}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </GlassCard>
-        </TabsContent>
-
-        <TabsContent value="fidelidade">
-          <GlassCard>
-            <SectionTitle
-              title="Programa de fidelidade"
-              description="Extrato de pontos com histórico completo de acúmulo e resgate."
-            />
-            <div className="grid gap-3 sm:grid-cols-3">
-              <StatCard
-                label="Saldo de pontos"
-                value={data.loyalty?.points ?? 0}
-                hint={`Nível ${data.loyalty?.tier ?? "—"}`}
-              />
-              <StatCard label="Serviços comprados" value={data.servicesPurchased.length} />
-              <StatCard
-                label="Loyalty value"
-                value={money(metrics.lifetimeValue)}
-                hint="Baseado em pagamentos registrados"
-              />
-            </div>
-            <div className="mt-4">
-              <DataTable
-                dense
-                keyOf={(row: any) => row._id}
-                rows={data.loyaltyLedger}
-                columns={[
-                  { key: "date", header: "Data", render: (row: any) => formatDate(row.date) },
-                  { key: "reason", header: "Motivo" },
-                  {
-                    key: "points",
-                    header: "Pontos",
-                    align: "right",
-                    render: (row: any) => (
-                      <span className={row.points < 0 ? "text-rose-600" : "text-emerald-600"}>
-                        {row.points > 0 ? "+" : ""}
-                        {row.points}
-                      </span>
-                    ),
-                  },
-                  { key: "balanceAfter", header: "Saldo", align: "right" },
-                ]}
-              />
-            </div>
-          </GlassCard>
-        </TabsContent>
       </Tabs>
 
       {can("settings.edit") && (

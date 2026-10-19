@@ -23,14 +23,8 @@ const Services = lazy(() =>
 const Packages = lazy(() =>
   import("./pages/Catalog.tsx").then((module) => ({ default: module.Packages })),
 );
-const Aftercare = lazy(() =>
-  import("./pages/Catalog.tsx").then((module) => ({ default: module.Aftercare })),
-);
 const Staff = lazy(() =>
   import("./pages/Team.tsx").then((module) => ({ default: module.Staff })),
-);
-const Availability = lazy(() =>
-  import("./pages/Team.tsx").then((module) => ({ default: module.Availability })),
 );
 const Performance = lazy(() =>
   import("./pages/Team.tsx").then((module) => ({ default: module.Performance })),
@@ -38,11 +32,8 @@ const Performance = lazy(() =>
 const Commissions = lazy(() =>
   import("./pages/Team.tsx").then((module) => ({ default: module.Commissions })),
 );
-const Invoices = lazy(() =>
-  import("./pages/Finance.tsx").then((module) => ({ default: module.Invoices })),
-);
-const Payments = lazy(() =>
-  import("./pages/Finance.tsx").then((module) => ({ default: module.Payments })),
+const Billing = lazy(() =>
+  import("./pages/Finance.tsx").then((module) => ({ default: module.Billing })),
 );
 const Expenses = lazy(() =>
   import("./pages/Finance.tsx").then((module) => ({ default: module.Expenses })),
@@ -53,11 +44,8 @@ const Cashflow = lazy(() =>
 const Quotes = lazy(() =>
   import("./pages/Finance.tsx").then((module) => ({ default: module.Quotes })),
 );
-const Products = lazy(() =>
-  import("./pages/Inventory.tsx").then((module) => ({ default: module.Products })),
-);
-const Movements = lazy(() =>
-  import("./pages/Inventory.tsx").then((module) => ({ default: module.Movements })),
+const Inventory = lazy(() =>
+  import("./pages/Inventory.tsx").then((module) => ({ default: module.Inventory })),
 );
 const Suppliers = lazy(() =>
   import("./pages/Inventory.tsx").then((module) => ({ default: module.Suppliers })),
@@ -68,15 +56,6 @@ const StockAlerts = lazy(() =>
 const TreatmentHistory = lazy(() =>
   import("./pages/CRM.tsx").then((module) => ({ default: module.TreatmentHistory })),
 );
-const PatientRecords = lazy(() =>
-  import("./pages/CRM.tsx").then((module) => ({ default: module.PatientRecords })),
-);
-const Forms = lazy(() =>
-  import("./pages/CRM.tsx").then((module) => ({ default: module.Forms })),
-);
-const Photos = lazy(() =>
-  import("./pages/CRM.tsx").then((module) => ({ default: module.Photos })),
-);
 const Retention = lazy(() =>
   import("./pages/Retention.tsx").then((module) => ({ default: module.Retention })),
 );
@@ -85,9 +64,6 @@ const Alerts = lazy(() =>
 );
 const Waitlist = lazy(() =>
   import("./pages/Retention.tsx").then((module) => ({ default: module.Waitlist })),
-);
-const Loyalty = lazy(() =>
-  import("./pages/Retention.tsx").then((module) => ({ default: module.Loyalty })),
 );
 const GiftCards = lazy(() =>
   import("./pages/Retention.tsx").then((module) => ({ default: module.GiftCards })),
@@ -187,25 +163,25 @@ export function AppRoutes() {
             { path: "/app/clientes", element: <Clients /> },
             { path: "/app/clientes/:clientId", element: <ClientDetail /> },
             { path: "/app/historico", element: <TreatmentHistory /> },
-            { path: "/app/fichas", element: <PatientRecords /> },
+            { path: "/app/fichas", element: <Navigate to="/app/historico" replace /> },
             { path: "/app/retornos", element: <Retention /> },
-            { path: "/app/fidelidade", element: <Loyalty /> },
+            { path: "/app/fidelidade", element: <Navigate to="/app/retornos" replace /> },
             { path: "/app/servicos", element: <Services /> },
             { path: "/app/pacotes", element: <Packages /> },
             { path: "/app/orcamentos", element: <Quotes /> },
-            { path: "/app/formularios", element: <Forms /> },
-            { path: "/app/recomendacoes", element: <Aftercare /> },
-            { path: "/app/fotos", element: <Photos /> },
+            { path: "/app/formularios", element: <Navigate to="/app/clientes" replace /> },
+            { path: "/app/recomendacoes", element: <Navigate to="/app/servicos" replace /> },
+            { path: "/app/fotos", element: <Navigate to="/app/clientes" replace /> },
             { path: "/app/profissionais", element: <Staff /> },
-            { path: "/app/disponibilidade", element: <Availability /> },
+            { path: "/app/disponibilidade", element: <Navigate to="/app/profissionais" replace /> },
             { path: "/app/comissoes", element: <Commissions /> },
             { path: "/app/desempenho", element: <Performance /> },
-            { path: "/app/faturas", element: <Invoices /> },
-            { path: "/app/pagamentos", element: <Payments /> },
+            { path: "/app/faturas", element: <Billing /> },
+            { path: "/app/pagamentos", element: <Navigate to="/app/faturas?aba=pagamentos" replace /> },
             { path: "/app/despesas", element: <Expenses /> },
             { path: "/app/caixa", element: <Cashflow /> },
-            { path: "/app/produtos", element: <Products /> },
-            { path: "/app/movimentacoes", element: <Movements /> },
+            { path: "/app/produtos", element: <Inventory /> },
+            { path: "/app/movimentacoes", element: <Navigate to="/app/produtos?aba=movimentacoes" replace /> },
             { path: "/app/fornecedores", element: <Suppliers /> },
             { path: "/app/estoque-alertas", element: <StockAlerts /> },
             { path: "/app/reagendamentos", element: <Retention /> },

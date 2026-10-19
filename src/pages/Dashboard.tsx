@@ -275,7 +275,7 @@ export default function Dashboard() {
           hint="Valores efetivamente recebidos hoje"
           icon={<CircleDollarSign className="size-4" />}
           tone="positive"
-          onClick={() => navigate("/app/pagamentos")}
+          onClick={() => navigate("/app/faturas?aba=pagamentos")}
         />
         <StatCard
           label="Faturamento do mês"

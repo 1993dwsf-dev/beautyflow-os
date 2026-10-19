@@ -32,11 +32,11 @@ import { Link } from "react-router";
 
 const MODULES = [
   { icon: <CalendarDays className="size-5" />, title: "Agenda", text: "Dia, semana e mês, sem conflito de horário." },
-  { icon: <Users className="size-5" />, title: "Clientes", text: "Ficha, histórico e preferências." },
-  { icon: <HeartHandshake className="size-5" />, title: "Fichas", text: "Prontuário, consentimento e antes/depois." },
+  { icon: <Users className="size-5" />, title: "Clientes", text: "Cadastro, histórico e retornos pendentes." },
   { icon: <Sparkles className="size-5" />, title: "Catálogo", text: "Serviços, pacotes, preço e comissão." },
-  { icon: <Receipt className="size-5" />, title: "Financeiro", text: "Faturas, sinais, pagamentos e despesas." },
-  { icon: <TrendingUp className="size-5" />, title: "Retenção", text: "Retornos, fidelidade e estoque." },
+  { icon: <Receipt className="size-5" />, title: "Financeiro", text: "Faturas e pagamentos no mesmo extrato." },
+  { icon: <Package className="size-5" />, title: "Estoque", text: "Produtos, movimentações e fornecedores." },
+  { icon: <LineChart className="size-5" />, title: "Relatórios", text: "Indicadores e exportações em CSV." },
 ];
 
 const JOURNEY = [
@@ -60,7 +60,7 @@ const PRINCIPLES = [
   {
     icon: <ShieldCheck className="size-5" />,
     title: "Dados sensíveis sob controle",
-    text: "Permissões por papel verificadas no backend, trilha de auditoria e acesso restrito a fichas de saúde e fotos privadas.",
+    text: "Permissões por papel verificadas no backend, trilha de auditoria e acesso restrito a dados de saúde e consentimentos.",
   },
   {
     icon: <BadgeCheck className="size-5" />,

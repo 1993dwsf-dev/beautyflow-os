@@ -442,7 +442,6 @@ function ServiceDialog({
   const [form, setForm] = useState({
     name: service?.name ?? emptyService.name,
     categoryId: service?.categoryId ?? "",
-    description: service?.description ?? "",
     price: service ? centsToInput(service.price) : "",
     durationMin: String(service?.durationMin ?? 60),
     bufferMin: String(service?.bufferMin ?? 10),
@@ -471,7 +470,7 @@ function ServiceDialog({
       orgId,
       name: form.name,
       categoryId: form.categoryId ? (form.categoryId as Id<"serviceCategories">) : undefined,
-      description: form.description || undefined,
+      description: service?.description,
       price: parseMoney(form.price),
       durationMin: Number(form.durationMin) || 0,
       bufferMin: Number(form.bufferMin) || 0,
@@ -652,13 +651,6 @@ function ServiceDialog({
         </div>
       </Field>
 
-      <Field label="Descrição">
-        <Textarea
-          value={form.description}
-          onChange={(e) => setForm({ ...form, description: e.target.value })}
-          rows={2}
-        />
-      </Field>
       <Field label="Garantia / política de retorno">
         <Textarea
           value={form.warrantyNotes}

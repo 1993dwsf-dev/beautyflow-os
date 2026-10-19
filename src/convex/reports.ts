@@ -439,10 +439,13 @@ export const reportBundle = query({
       const hour = `${String(Math.floor(a.startMinutes / 60)).padStart(2, "0")}:00`;
       hourBuckets[hour] = (hourBuckets[hour] ?? 0) + 1;
     }
-    const byStaff: Record<string, { total: number; completed: number; cancelled: number; noShow: number; revenue: number }> = {};
-    for (const s of data.staff) {
+    // Names are free text ("Jéssica", "Hidratação"), so they must never be used
+    // as object keys: Convex only accepts ASCII field names in documents and
+    // return values. Both groupings are returned as explicit lists.
+    const byStaff = data.staff.map((s) => {
       const mine = appointments.filter((a) => a.staffId === s._id);
-      byStaff[s.name] = {
+      return {
+        name: s.name,
         total: mine.length,
         completed: mine.filter((a) => a.status === "completed").length,
         cancelled: mine.filter((a) => a.status === "cancelled").length,
@@ -451,18 +454,22 @@ export const reportBundle = query({
           mine.filter((a) => a.status === "completed").map((a) => a.totalPrice - a.discount),
         ),
       };
-    }
-    const byService: Record<string, { count: number; revenue: number; minutes: number }> = {};
+    });
+    const serviceTotals = new Map<string, { count: number; revenue: number; minutes: number }>();
     for (const a of completed) {
       for (const item of a.items) {
         const svc = data.services.find((s) => s._id === item.refId);
         const name = svc?.name ?? item.name;
-        byService[name] = byService[name] ?? { count: 0, revenue: 0, minutes: 0 };
-        byService[name].count += 1;
-        byService[name].revenue += item.total;
-        byService[name].minutes += svc?.durationMin ?? a.durationMin;
+        const current = serviceTotals.get(name) ?? { count: 0, revenue: 0, minutes: 0 };
+        current.count += 1;
+        current.revenue += item.total;
+        current.minutes += svc?.durationMin ?? a.durationMin;
+        serviceTotals.set(name, current);
       }
     }
+    const byService = Array.from(serviceTotals, ([name, value]) => ({ name, ...value })).sort(
+      (a, b) => b.revenue - a.revenue,
+    );
 
     const avgDuration =
       completed.length ? Math.round(sum(completed.map((a) => a.durationMin)) / completed.length) : 0;
@@ -472,10 +479,14 @@ export const reportBundle = query({
     for (const a of data.allocations) {
       paidPerInvoice.set(a.invoiceId as string, (paidPerInvoice.get(a.invoiceId as string) ?? 0) + a.amount);
     }
-    const expensesByCategory: Record<string, number> = {};
+    const categoryTotals = new Map<string, number>();
     for (const e of data.expenses.filter((e) => inRange(e.date))) {
-      expensesByCategory[e.category] = (expensesByCategory[e.category] ?? 0) + e.amount;
+      categoryTotals.set(e.category, (categoryTotals.get(e.category) ?? 0) + e.amount);
     }
+    const expensesByCategory = Array.from(categoryTotals, ([category, value]) => ({
+      category,
+      value,
+    })).sort((a, b) => b.value - a.value);
     const methodTotals: Record<string, number> = {};
     for (const p of data.payments.filter((p) => inRange(p.date))) {
       const delta = p.kind === "reembolso" ? -p.amount : p.amount;
@@ -540,15 +551,14 @@ export const reportBundle = query({
     // inventory
     const inventoryValue = sum(data.products.map((p) => p.quantity * p.cost));
     const retailValue = sum(data.products.map((p) => p.quantity * p.price));
-    const productSales = data.movements
-      .filter((m) => m.type === "venda" && inRange(m.date))
-      .reduce<Record<string, { quantity: number; revenue: number }>>((acc, m) => {
-        const name = data.products.find((p) => p._id === m.productId)?.name ?? "—";
-        acc[name] = acc[name] ?? { quantity: 0, revenue: 0 };
-        acc[name].quantity += Math.abs(m.quantity);
-        acc[name].revenue += Math.abs(m.quantity) * m.unitCost;
-        return acc;
-      }, {});
+    const productTotals = new Map<string, { quantity: number; revenue: number }>();
+    for (const m of data.movements.filter((m) => m.type === "venda" && inRange(m.date))) {
+      const name = data.products.find((p) => p._id === m.productId)?.name ?? "—";
+      const current = productTotals.get(name) ?? { quantity: 0, revenue: 0 };
+      current.quantity += Math.abs(m.quantity);
+      current.revenue += Math.abs(m.quantity) * m.unitCost;
+      productTotals.set(name, current);
+    }
 
     return {
       operational: {
@@ -623,7 +633,7 @@ export const reportBundle = query({
         lowStock: data.products
           .filter((p) => p.quantity <= p.minStock)
           .map((p) => ({ name: p.name, quantity: p.quantity, minStock: p.minStock })),
-        productSales: Object.entries(productSales).map(([name, v]) => ({ name, ...v })),
+        productSales: Array.from(productTotals, ([name, v]) => ({ name, ...v })),
         consumption: materialCost,
       },
     };

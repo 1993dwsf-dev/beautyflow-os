@@ -259,6 +259,27 @@ export const PAYMENT_METHOD: Record<string, string> = {
   other: "Outro",
 };
 
+const LEGACY_PAYMENT_METHODS: Record<string, string> = {
+  dinheiro: "cash",
+  cartao_credito: "credit_card",
+  cartao_debito: "debit_card",
+  transferencia: "transfer",
+  cartao_presente: "gift_card",
+  outro: "other",
+  boleto: "other",
+};
+
+/**
+ * Maps values saved by older organizations ("dinheiro", "cartao_credito") to
+ * the canonical keys accepted by the payment mutation, dropping unknown ones.
+ */
+export function normalizePaymentMethods(methods: string[] | undefined): string[] {
+  const mapped = (methods ?? [])
+    .map((method) => LEGACY_PAYMENT_METHODS[method] ?? method)
+    .filter((method) => Object.prototype.hasOwnProperty.call(PAYMENT_METHOD, method));
+  return Array.from(new Set(mapped));
+}
+
 export const INVOICE_STATUS: Record<string, string> = {
   draft: "Rascunho",
   issued: "Emitida",

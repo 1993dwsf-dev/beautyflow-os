@@ -26,7 +26,6 @@ import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import {
   AlertTriangle,
-  ArrowLeftRight,
   BarChart3,
   Bell,
   Building2,
@@ -36,13 +35,8 @@ import {
   Check,
   ChevronDown,
   ChevronsUpDown,
-  Clock,
-  CreditCard,
-  FileText,
   Gift,
-  HeartHandshake,
   History,
-  Image as ImageIcon,
   LayoutDashboard,
   LineChart,
   ListChecks,
@@ -95,9 +89,7 @@ export const NAV_GROUPS: { group: string; items: NavItem[] }[] = [
     items: [
       { to: "/app/clientes", label: "Cadastro de Clientes", icon: <Users className={GROUP_ICON} />, perm: "clients.view" },
       { to: "/app/historico", label: "Histórico de Atendimentos", icon: <History className={GROUP_ICON} />, perm: "appointments.view" },
-      { to: "/app/fichas", label: "Fichas de Consulta", icon: <FileText className={GROUP_ICON} />, flag: "forms" },
       { to: "/app/retornos", label: "Retornos Pendentes", icon: <CalendarClock className={GROUP_ICON} />, perm: "clients.view" },
-      { to: "/app/fidelidade", label: "Fidelidade", icon: <Sparkles className={GROUP_ICON} />, flag: "loyalty" },
     ],
   },
   {
@@ -106,16 +98,12 @@ export const NAV_GROUPS: { group: string; items: NavItem[] }[] = [
       { to: "/app/servicos", label: "Serviços", icon: <Sparkles className={GROUP_ICON} />, perm: "services.view" },
       { to: "/app/pacotes", label: "Pacotes", icon: <PackageOpen className={GROUP_ICON} />, perm: "services.view", flag: "memberships" },
       { to: "/app/orcamentos", label: "Orçamentos", icon: <Receipt className={GROUP_ICON} />, perm: "appointments.view" },
-      { to: "/app/formularios", label: "Formulários e Consentimentos", icon: <ShieldCheck className={GROUP_ICON} />, flag: "forms" },
-      { to: "/app/recomendacoes", label: "Recomendações Pós-Atendimento", icon: <HeartHandshake className={GROUP_ICON} />, flag: "forms" },
-      { to: "/app/fotos", label: "Antes e Depois", icon: <ImageIcon className={GROUP_ICON} />, flag: "photos", perm: "photos.view" },
     ],
   },
   {
     group: "Equipe",
     items: [
       { to: "/app/profissionais", label: "Profissionais", icon: <UserCog className={GROUP_ICON} />, perm: "staff.view" },
-      { to: "/app/disponibilidade", label: "Disponibilidade e Escalas", icon: <Clock className={GROUP_ICON} />, perm: "staff.view" },
       { to: "/app/comissoes", label: "Comissões", icon: <PiggyBank className={GROUP_ICON} />, perm: "commissions.view", flag: "commissions" },
       { to: "/app/desempenho", label: "Desempenho", icon: <TrendingUp className={GROUP_ICON} />, perm: "staff.view" },
     ],
@@ -123,8 +111,7 @@ export const NAV_GROUPS: { group: string; items: NavItem[] }[] = [
   {
     group: "Financeiro",
     items: [
-      { to: "/app/faturas", label: "Faturas e Recibos", icon: <Receipt className={GROUP_ICON} />, perm: "invoices.view", flag: "finance" },
-      { to: "/app/pagamentos", label: "Pagamentos", icon: <CreditCard className={GROUP_ICON} />, perm: "payments.view", flag: "finance" },
+      { to: "/app/faturas", label: "Faturas e Pagamentos", icon: <Receipt className={GROUP_ICON} />, perm: "invoices.view", flag: "finance" },
       { to: "/app/despesas", label: "Despesas", icon: <Wallet className={GROUP_ICON} />, perm: "expenses.view", flag: "finance" },
       { to: "/app/caixa", label: "Fluxo de Caixa", icon: <LineChart className={GROUP_ICON} />, perm: "reports.financial", flag: "finance" },
     ],
@@ -132,8 +119,7 @@ export const NAV_GROUPS: { group: string; items: NavItem[] }[] = [
   {
     group: "Estoque",
     items: [
-      { to: "/app/produtos", label: "Produtos", icon: <Package className={GROUP_ICON} />, perm: "inventory.view", flag: "inventory" },
-      { to: "/app/movimentacoes", label: "Movimentações", icon: <ArrowLeftRight className={GROUP_ICON} />, perm: "inventory.view", flag: "inventory" },
+      { to: "/app/produtos", label: "Produtos e Movimentações", icon: <Package className={GROUP_ICON} />, perm: "inventory.view", flag: "inventory" },
       { to: "/app/fornecedores", label: "Fornecedores", icon: <Truck className={GROUP_ICON} />, perm: "inventory.view", flag: "inventory" },
       { to: "/app/estoque-alertas", label: "Alertas de Estoque", icon: <AlertTriangle className={GROUP_ICON} />, perm: "inventory.view", flag: "inventory" },
     ],

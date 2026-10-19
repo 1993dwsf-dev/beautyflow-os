@@ -26,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { errorMessage } from "@/lib/errors";
 import {
@@ -36,7 +37,6 @@ import {
   label,
   money,
   parseMoney,
-  startOfMonth,
   todayISO,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -54,6 +54,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { useState } from "react";
+import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 
 const MOVEMENT_OPTIONS = [
@@ -66,7 +67,7 @@ const MOVEMENT_OPTIONS = [
   { value: "devolucao", label: "Devolução" },
 ];
 
-export function Products() {
+function ProductsSection({ embedded = false }: { embedded?: boolean }) {
   const { orgId, can } = useApp();
   const [search, setSearch] = useState("");
   const [categoryId, setCategoryId] = useState("all");
@@ -101,25 +102,46 @@ export function Products() {
 
   return (
     <div className="space-y-5">
-      <PageHeader
-        eyebrow="Estoque"
-        title="Produtos"
-        description="Produtos de varejo e insumos de serviço. Toda alteração de quantidade precisa de uma movimentação registrada."
-        actions={
-          can("inventory.edit") && (
-            <>
-              <Button variant="outline" className="glass-soft" onClick={() => setCategoryOpen(true)}>
-                <Plus className="mr-2 size-4" />
+      {embedded ? (
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <SectionTitle
+            title="Produtos"
+            description="Produtos de varejo e insumos de serviço. Toda alteração de quantidade precisa de uma movimentação registrada."
+          />
+          {can("inventory.edit") && (
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" onClick={() => setCategoryOpen(true)}>
+                <Plus className="mr-1.5 size-3.5" />
                 Categoria
               </Button>
-              <Button onClick={() => setDialog({ open: true })}>
-                <PackagePlus className="mr-2 size-4" />
+              <Button size="sm" onClick={() => setDialog({ open: true })}>
+                <PackagePlus className="mr-1.5 size-3.5" />
                 Novo produto
               </Button>
-            </>
-          )
-        }
-      />
+            </div>
+          )}
+        </div>
+      ) : (
+        <PageHeader
+          eyebrow="Estoque"
+          title="Produtos"
+          description="Produtos de varejo e insumos de serviço. Toda alteração de quantidade precisa de uma movimentação registrada."
+          actions={
+            can("inventory.edit") && (
+              <>
+                <Button variant="outline" className="glass-soft" onClick={() => setCategoryOpen(true)}>
+                  <Plus className="mr-2 size-4" />
+                  Categoria
+                </Button>
+                <Button onClick={() => setDialog({ open: true })}>
+                  <PackagePlus className="mr-2 size-4" />
+                  Novo produto
+                </Button>
+              </>
+            )
+          }
+        />
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Itens cadastrados" value={rows.length} icon={<Package className="size-4" />} />
@@ -139,7 +161,7 @@ export function Products() {
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Nome, marca, SKU, código de barras"
+              placeholder="Nome ou marca"
               className="w-64"
             />
           </Field>
@@ -182,7 +204,7 @@ export function Products() {
                 <div>
                   <p className="font-medium">{row.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {[row.brand, row.categoryName, row.sku].filter(Boolean).join(" · ")}
+                    {[row.brand, row.categoryName].filter(Boolean).join(" · ")}
                   </p>
                 </div>
               ),
@@ -362,15 +384,12 @@ function ProductDialog({
     name: product?.name ?? "",
     brand: product?.brand ?? "",
     categoryId: product?.categoryId ?? "",
-    sku: product?.sku ?? "",
-    barcode: product?.barcode ?? "",
     supplierId: product?.supplierId ?? "",
     cost: product ? centsToInput(product.cost) : "",
     price: product ? centsToInput(product.price) : "",
     minStock: String(product?.minStock ?? 1),
     reorderQty: String(product?.reorderQty ?? 1),
     expirationDate: product?.expirationDate ?? "",
-    location: product?.location ?? "",
     type: product?.type ?? "consumo",
     initialQuantity: "",
   });
@@ -394,15 +413,12 @@ function ProductDialog({
             name: form.name,
             brand: form.brand || undefined,
             categoryId: form.categoryId ? (form.categoryId as Id<"productCategories">) : undefined,
-            sku: form.sku,
-            barcode: form.barcode || undefined,
             supplierId: form.supplierId ? (form.supplierId as Id<"suppliers">) : undefined,
             cost: parseMoney(form.cost),
             price: parseMoney(form.price),
             minStock: Number(form.minStock) || 0,
             reorderQty: Number(form.reorderQty) || 0,
             expirationDate: form.expirationDate || undefined,
-            location: form.location || undefined,
             type: form.type,
             initialQuantity: form.initialQuantity ? Number(form.initialQuantity) : undefined,
           });
@@ -448,12 +464,6 @@ function ProductDialog({
             </SelectContent>
           </Select>
         </Field>
-        <Field label="SKU *">
-          <Input value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} />
-        </Field>
-        <Field label="Código de barras">
-          <Input value={form.barcode} onChange={(e) => setForm({ ...form, barcode: e.target.value })} />
-        </Field>
         <Field label="Custo de compra *">
           <MoneyInput value={form.cost} onChange={(value) => setForm({ ...form, cost: value })} />
         </Field>
@@ -480,9 +490,6 @@ function ProductDialog({
             value={form.expirationDate}
             onChange={(e) => setForm({ ...form, expirationDate: e.target.value })}
           />
-        </Field>
-        <Field label="Local de armazenamento">
-          <Input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
         </Field>
         <Field label="Tipo de uso">
           <Select value={form.type} onValueChange={(value) => setForm({ ...form, type: value })}>
@@ -611,7 +618,7 @@ function MovementDialog({
   );
 }
 
-export function Movements() {
+function MovementsSection({ embedded = false }: { embedded?: boolean }) {
   const { orgId, can } = useApp();
   const [type, setType] = useState("all");
   const [productId, setProductId] = useState("all");
@@ -644,11 +651,18 @@ export function Movements() {
 
   return (
     <div className="space-y-5">
-      <PageHeader
-        eyebrow="Estoque"
-        title="Movimentações"
-        description="Histórico completo de entradas, saídas, vendas, consumo em serviços, perdas e ajustes com saldo resultante."
-      />
+      {embedded ? (
+        <SectionTitle
+          title="Movimentações"
+          description="Histórico completo de entradas, saídas, vendas, consumo em serviços, perdas e ajustes com saldo resultante."
+        />
+      ) : (
+        <PageHeader
+          eyebrow="Estoque"
+          title="Movimentações"
+          description="Histórico completo de entradas, saídas, vendas, consumo em serviços, perdas e ajustes com saldo resultante."
+        />
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Movimentações no período" value={movements.length} />
@@ -800,6 +814,40 @@ export function Movements() {
           <Textarea rows={2} value={correctReason} onChange={(e) => setCorrectReason(e.target.value)} />
         </Field>
       </FormDialog>
+    </div>
+  );
+}
+
+/**
+ * Inventory screen: products and stock movements share one panel so a product
+ * and its entries/exits are handled without switching screens.
+ */
+export function Inventory() {
+  const [params, setParams] = useSearchParams();
+  const tab = params.get("aba") === "movimentacoes" ? "movimentacoes" : "produtos";
+  const setTab = (value: string) =>
+    setParams(value === "produtos" ? {} : { aba: value }, { replace: true });
+
+  return (
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Estoque"
+        title="Produtos e movimentações"
+        description="Cadastro de produtos e histórico de entradas, saídas, vendas, consumo e perdas no mesmo painel."
+      />
+
+      <Tabs value={tab} onValueChange={setTab} className="space-y-4">
+        <TabsList className="glass-soft flex-wrap">
+          <TabsTrigger value="produtos">Produtos</TabsTrigger>
+          <TabsTrigger value="movimentacoes">Movimentações</TabsTrigger>
+        </TabsList>
+        <TabsContent value="produtos">
+          <ProductsSection embedded />
+        </TabsContent>
+        <TabsContent value="movimentacoes">
+          <MovementsSection embedded />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

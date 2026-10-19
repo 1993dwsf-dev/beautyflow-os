@@ -37,11 +37,18 @@ import {
   type Permission,
 } from "@/convex/lib/permissions";
 import { errorMessage } from "@/lib/errors";
-import { PAYMENT_METHOD, WEEKDAYS, formatDateTime, formatPhone } from "@/lib/format";
+import {
+  PAYMENT_METHOD,
+  WEEKDAYS,
+  formatDateTime,
+  formatPhone,
+  normalizePaymentMethods,
+} from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
 import {
   Building2,
+  Check,
   Clock,
   Copy,
   RefreshCcw,
@@ -74,6 +81,35 @@ const DEFAULT_HOURS = Array.from({ length: 7 }, (_, weekday) => ({
   close: "19:00",
 }));
 
+const EXPENSE_CATEGORY_OPTIONS = [
+  "Produtos e insumos",
+  "Equipamentos",
+  "Aluguel",
+  "Energia elétrica",
+  "Água",
+  "Internet",
+  "Marketing",
+  "Publicidade",
+  "Custos com equipe",
+  "Treinamento",
+  "Software",
+  "Limpeza",
+  "Manutenção",
+  "Seguros",
+  "Administrativo",
+  "Impostos e taxas",
+  "Outras despesas",
+];
+
+const toggleClass = (active: boolean, disabled: boolean) =>
+  cn(
+    "inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium transition",
+    active
+      ? "border-primary/40 bg-primary/12 text-primary"
+      : "border-white/70 bg-white/70 text-foreground/80 hover:bg-white",
+    disabled && "cursor-not-allowed opacity-60",
+  );
+
 export function Settings() {
   const { orgId, context, can, flag, selectOrg } = useApp();
   const org = context?.org;
@@ -89,6 +125,7 @@ export function Settings() {
   const [hours, setHours] = useState<any[]>(DEFAULT_HOURS);
   const [saving, setSaving] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
+  const [customCategory, setCustomCategory] = useState("");
 
   useEffect(() => {
     if (!org) return;
@@ -110,8 +147,8 @@ export function Settings() {
       onlineBookingLeadHours: String(org.onlineBookingLeadHours ?? 4),
       taxPct: String(org.taxPct ?? 0),
       brandAccent: org.brandAccent ?? "#0ea5a4",
-      paymentMethods: (org.paymentMethods ?? []).join(", "),
-      expenseCategories: (org.expenseCategories ?? []).join(", "),
+      paymentMethods: normalizePaymentMethods(org.paymentMethods),
+      expenseCategories: (org.expenseCategories ?? []) as string[],
       commissionBaseDefault: org.commissionBaseDefault ?? "gross",
       publicBookingEnabled: !!org.publicBookingEnabled,
       requireApprovalOnline: !!org.requireApprovalOnline,
@@ -554,28 +591,95 @@ export function Settings() {
           </GlassCard>
 
           <GlassCard>
-            <SectionTitle title="Formas de pagamento aceitas" description="Separe por vírgula." />
-            <Field label="Formas de pagamento">
-              <Input
-                value={form.paymentMethods}
-                disabled={!editable}
-                onChange={(event) => setForm({ ...form, paymentMethods: event.target.value })}
-              />
-            </Field>
-            <div className="mt-2 flex flex-wrap gap-1">
-              {Object.entries(PAYMENT_METHOD).map(([key, value]) => (
-                <Badge key={key} variant="outline" className="text-[0.65rem]">
-                  {value} <span className="ml-1 text-muted-foreground">{key}</span>
-                </Badge>
-              ))}
+            <SectionTitle
+              title="Formas de pagamento aceitas"
+              description="Clique para marcar as formas usadas no caixa e nas faturas."
+            />
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(PAYMENT_METHOD).map(([key, value]) => {
+                const active = form.paymentMethods.includes(key);
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    disabled={!editable}
+                    aria-pressed={active}
+                    className={toggleClass(active, !editable)}
+                    onClick={() =>
+                      setForm({
+                        ...form,
+                        paymentMethods: active
+                          ? form.paymentMethods.filter((item: string) => item !== key)
+                          : [...form.paymentMethods, key],
+                      })
+                    }
+                  >
+                    {active && <Check className="size-3.5" />}
+                    {value}
+                  </button>
+                );
+              })}
             </div>
-            <Field label="Categorias de despesa" className="mt-4">
-              <Input
-                value={form.expenseCategories}
-                disabled={!editable}
-                onChange={(event) => setForm({ ...form, expenseCategories: event.target.value })}
-              />
+
+            <Field
+              label="Categorias de despesa"
+              className="mt-5"
+              hint="Clique para marcar as categorias disponíveis no lançamento de despesas."
+            >
+              <div className="flex flex-wrap gap-2">
+                {Array.from(
+                  new Set([...EXPENSE_CATEGORY_OPTIONS, ...form.expenseCategories]),
+                ).map((category) => {
+                  const active = form.expenseCategories.includes(category);
+                  return (
+                    <button
+                      key={category}
+                      type="button"
+                      disabled={!editable}
+                      aria-pressed={active}
+                      className={toggleClass(active, !editable)}
+                      onClick={() =>
+                        setForm({
+                          ...form,
+                          expenseCategories: active
+                            ? form.expenseCategories.filter((item: string) => item !== category)
+                            : [...form.expenseCategories, category],
+                        })
+                      }
+                    >
+                      {active && <Check className="size-3.5" />}
+                      {category}
+                    </button>
+                  );
+                })}
+              </div>
             </Field>
+            {editable && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Input
+                  value={customCategory}
+                  onChange={(event) => setCustomCategory(event.target.value)}
+                  placeholder="Nova categoria de despesa"
+                  className="max-w-xs"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!customCategory.trim()}
+                  onClick={() => {
+                    const value = customCategory.trim();
+                    if (!value) return;
+                    setForm({
+                      ...form,
+                      expenseCategories: Array.from(new Set([...form.expenseCategories, value])),
+                    });
+                    setCustomCategory("");
+                  }}
+                >
+                  Adicionar
+                </Button>
+              </div>
+            )}
             {editable && (
               <Button
                 className="mt-4"
@@ -586,14 +690,8 @@ export function Settings() {
                     commissionBaseDefault: form.commissionBaseDefault,
                     taxPct: Number(form.taxPct) || 0,
                     depositPolicy: form.depositPolicy || undefined,
-                    paymentMethods: form.paymentMethods
-                      .split(",")
-                      .map((item: string) => item.trim())
-                      .filter(Boolean),
-                    expenseCategories: form.expenseCategories
-                      .split(",")
-                      .map((item: string) => item.trim())
-                      .filter(Boolean),
+                    paymentMethods: form.paymentMethods,
+                    expenseCategories: form.expenseCategories,
                   })
                 }
               >

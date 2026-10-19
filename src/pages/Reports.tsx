@@ -133,16 +133,9 @@ export function Reports() {
   const cli = bundle.clients;
   const inv = bundle.inventory;
 
-  const staffRows = Object.entries(op.byStaff).map(([name, value]: [string, any]) => ({
-    name,
-    ...value,
-  }));
-  const serviceRows = Object.entries(op.byService)
-    .map(([name, value]: [string, any]) => ({ name, ...value }))
-    .sort((a, b) => b.revenue - a.revenue);
-  const expenseRows = Object.entries(fin.expensesByCategory)
-    .map(([category, value]) => ({ category, value: value as number }))
-    .sort((a, b) => b.value - a.value);
+  const staffRows = op.byStaff;
+  const serviceRows = op.byService;
+  const expenseRows = fin.expensesByCategory;
   const methodRows = Object.entries(fin.methods).map(([method, value]) => ({
     method,
     value: value as number,

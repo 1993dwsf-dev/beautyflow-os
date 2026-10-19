@@ -19,12 +19,47 @@ import {
   type OrgRole,
 } from "./lib/permissions";
 
+export const PAYMENT_METHOD_KEYS = [
+  "pix",
+  "cash",
+  "credit_card",
+  "debit_card",
+  "transfer",
+  "gift_card",
+  "other",
+] as const;
+
+/** Payment methods stored before the canonical keys were introduced. */
+const LEGACY_PAYMENT_METHODS: Record<string, string> = {
+  dinheiro: "cash",
+  cartao_credito: "credit_card",
+  cartao_debito: "debit_card",
+  transferencia: "transfer",
+  cartao_presente: "gift_card",
+  outro: "other",
+  boleto: "other",
+};
+
+/**
+ * Keeps `organizations.paymentMethods` aligned with the payment method enum
+ * accepted by `payments.createPayment`. Storing legacy labels such as
+ * "dinheiro" made the payment form submit a value the mutation rejects.
+ */
+export function normalizePaymentMethods(methods: string[] | undefined): string[] {
+  const normalized = (methods ?? [])
+    .map((method) => LEGACY_PAYMENT_METHODS[method] ?? method)
+    .filter((method): method is string =>
+      (PAYMENT_METHOD_KEYS as readonly string[]).includes(method),
+    );
+  return Array.from(new Set(normalized));
+}
+
 export const DEFAULT_PAYMENT_METHODS = [
   "pix",
-  "dinheiro",
-  "cartao_credito",
-  "cartao_debito",
-  "transferencia",
+  "cash",
+  "credit_card",
+  "debit_card",
+  "transfer",
 ];
 
 export const DEFAULT_EXPENSE_CATEGORIES = [
@@ -396,7 +431,11 @@ export const updateOrganization = mutation({
   },
   handler: async (ctx, { orgId, patch }) => {
     const { userId, member } = await requireMember(ctx, orgId, "settings.edit");
-    await ctx.db.patch(orgId, patch);
+    const next = { ...patch };
+    if (patch.paymentMethods) {
+      next.paymentMethods = normalizePaymentMethods(patch.paymentMethods);
+    }
+    await ctx.db.patch(orgId, next);
     await logAudit(ctx, {
       orgId,
       userId,

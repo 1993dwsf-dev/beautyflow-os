@@ -40,7 +40,7 @@ import {
   label,
   money,
   monthLabel,
-  monthLabelShort,
+  normalizePaymentMethods,
   parseMoney,
   startOfMonth,
   todayISO,
@@ -62,14 +62,14 @@ import {
   Wallet,
 } from "lucide-react";
 import { useState } from "react";
-import { Link } from "react-router";
+import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 
 // ---------------------------------------------------------------------------
 // Invoices
 // ---------------------------------------------------------------------------
 
-export function Invoices() {
+function InvoicesSection({ embedded = false }: { embedded?: boolean }) {
   const { orgId, can } = useApp();
   const today = todayISO();
   const [from, setFrom] = useState(startOfMonth(today));
@@ -77,6 +77,7 @@ export function Invoices() {
   const [status, setStatus] = useState("all");
   const [detailId, setDetailId] = useState<Id<"invoices"> | null>(null);
   const [newOpen, setNewOpen] = useState(false);
+  const [payInvoice, setPayInvoice] = useState<any | null>(null);
   const [cancelId, setCancelId] = useState<any | null>(null);
   const [cancelReason, setCancelReason] = useState("");
 
@@ -98,19 +99,34 @@ export function Invoices() {
 
   return (
     <div className="space-y-5">
-      <PageHeader
-        eyebrow="Financeiro"
-        title="Faturas e recibos"
-        description="Faturamento operacional com itens, sinal aplicado e saldo em aberto. Faturas quitadas ficam bloqueadas para edição."
-        actions={
-          can("invoices.edit") && (
-            <Button onClick={() => setNewOpen(true)}>
-              <Plus className="mr-2 size-4" />
+      {embedded ? (
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <SectionTitle
+            title="Faturas e recibos"
+            description="Itens, sinal aplicado e saldo em aberto. Faturas quitadas ficam bloqueadas para edição."
+          />
+          {can("invoices.edit") && (
+            <Button size="sm" onClick={() => setNewOpen(true)}>
+              <Plus className="mr-1.5 size-3.5" />
               Nova fatura
             </Button>
-          )
-        }
-      />
+          )}
+        </div>
+      ) : (
+        <PageHeader
+          eyebrow="Financeiro"
+          title="Faturas e recibos"
+          description="Faturamento operacional com itens, sinal aplicado e saldo em aberto. Faturas quitadas ficam bloqueadas para edição."
+          actions={
+            can("invoices.edit") && (
+              <Button onClick={() => setNewOpen(true)}>
+                <Plus className="mr-2 size-4" />
+                Nova fatura
+              </Button>
+            )
+          }
+        />
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Faturado no período" value={money(data.totals.issued)} />
@@ -217,20 +233,37 @@ export function Invoices() {
               key: "actions",
               header: "",
               align: "right",
-              render: (row: any) =>
-                can("invoices.edit") && row.status !== "cancelled" && row.paid === 0 ? (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    title="Cancelar fatura"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setCancelId(row);
-                    }}
-                  >
-                    <Ban className="size-4" />
-                  </Button>
-                ) : null,
+              render: (row: any) => (
+                <div className="flex justify-end gap-1">
+                  {can("payments.edit") && row.outstanding > 0 && row.status !== "cancelled" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      title="Registrar pagamento desta fatura"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setPayInvoice(row);
+                      }}
+                    >
+                      <CreditCard className="mr-1 size-3.5" />
+                      Receber
+                    </Button>
+                  )}
+                  {can("invoices.edit") && row.status !== "cancelled" && row.paid === 0 && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      title="Cancelar fatura"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setCancelId(row);
+                      }}
+                    >
+                      <Ban className="size-4" />
+                    </Button>
+                  )}
+                </div>
+              ),
             },
           ]}
         />
@@ -241,8 +274,25 @@ export function Invoices() {
         oficial depende de integração fiscal configurada e não está habilitada por padrão.
       </InfoBanner>
 
-      {detailId && <InvoiceDetail invoiceId={detailId} onClose={() => setDetailId(null)} />}
+      {detailId && (
+        <InvoiceDetail
+          invoiceId={detailId}
+          onClose={() => setDetailId(null)}
+          onRequestPayment={(invoice) => {
+            setDetailId(null);
+            setPayInvoice(invoice);
+          }}
+        />
+      )}
       {newOpen && <NewInvoiceDialog onClose={() => setNewOpen(false)} />}
+      {payInvoice && (
+        <PaymentDialog
+          invoiceId={payInvoice._id}
+          clientId={payInvoice.clientId}
+          suggestedAmount={payInvoice.outstanding}
+          onClose={() => setPayInvoice(null)}
+        />
+      )}
 
       <ConfirmDialog
         open={!!cancelId}
@@ -281,16 +331,18 @@ export function Invoices() {
 function InvoiceDetail({
   invoiceId,
   onClose,
+  onRequestPayment,
 }: {
   invoiceId: Id<"invoices">;
   onClose: () => void;
+  /** Closes this dialog first so the payment form is not nested in it. */
+  onRequestPayment: (invoice: any) => void;
 }) {
   const { orgId, can } = useApp();
   const detail = useQuery(
     api.invoices.invoiceDetail,
     orgId ? { orgId, invoiceId } : "skip",
   );
-  const [payOpen, setPayOpen] = useState(false);
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [adjustAmount, setAdjustAmount] = useState("");
   const [adjustReason, setAdjustReason] = useState("");
@@ -462,7 +514,7 @@ function InvoiceDetail({
 
         <div className="flex flex-wrap gap-2">
           {can("payments.edit") && invoice.outstanding > 0 && (
-            <Button size="sm" onClick={() => setPayOpen(true)}>
+            <Button size="sm" onClick={() => onRequestPayment(invoice)}>
               <CreditCard className="mr-1.5 size-3.5" />
               Registrar pagamento
             </Button>
@@ -507,15 +559,6 @@ function InvoiceDetail({
           integração de e-mail configurada.
         </InfoBanner>
       </FormDialog>
-
-      {payOpen && (
-        <PaymentDialog
-          invoiceId={invoiceId}
-          clientId={invoice.clientId}
-          suggestedAmount={invoice.outstanding}
-          onClose={() => setPayOpen(false)}
-        />
-      )}
 
       <FormDialog
         open={adjustOpen}
@@ -759,13 +802,13 @@ function PaymentDialog({
   if (!orgId) return null;
   const activeOrgId = orgId;
 
-  const methods = context?.org?.paymentMethods ?? [
-    "pix",
-    "dinheiro",
-    "cartao_credito",
-    "cartao_debito",
-    "transferencia",
-  ];
+  // Organizations created before the canonical keys existed still carry values
+  // such as "dinheiro" or "cartao_credito". Sending those to `createPayment`
+  // fails argument validation, which is why invoice payments could not be saved.
+  const configuredMethods = normalizePaymentMethods(context?.org?.paymentMethods);
+  const methods = configuredMethods.length
+    ? configuredMethods
+    : ["pix", "cash", "credit_card", "debit_card", "transfer"];
   const openInvoices = (invoices?.rows ?? []).filter(
     (row: any) => row.outstanding > 0 && row.status !== "cancelled",
   );
@@ -789,7 +832,7 @@ function PaymentDialog({
         clientId: selectedClient as Id<"clients">,
         invoiceId: selectedInvoice ? (selectedInvoice as Id<"invoices">) : undefined,
         amount: parseMoney(amount),
-        method: method as any,
+        method: (methods.includes(method) ? method : methods[0]) as any,
         kind,
         date,
         reference: reference || undefined,
@@ -932,7 +975,7 @@ function PaymentDialog({
   );
 }
 
-export function Payments() {
+function PaymentsSection({ embedded = false }: { embedded?: boolean }) {
   const { orgId, can } = useApp();
   const today = todayISO();
   const [from, setFrom] = useState(startOfMonth(today));
@@ -963,19 +1006,34 @@ export function Payments() {
 
   return (
     <div className="space-y-5">
-      <PageHeader
-        eyebrow="Financeiro"
-        title="Pagamentos e sinais"
-        description="Todo valor recebido é registrado com forma de pagamento, data e vínculo com fatura ou agendamento."
-        actions={
-          can("payments.edit") && (
-            <Button onClick={() => setNewOpen(true)}>
-              <Plus className="mr-2 size-4" />
+      {embedded ? (
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <SectionTitle
+            title="Pagamentos e sinais"
+            description="Todo valor recebido é registrado com forma de pagamento, data e vínculo com fatura ou agendamento."
+          />
+          {can("payments.edit") && (
+            <Button size="sm" onClick={() => setNewOpen(true)}>
+              <Plus className="mr-1.5 size-3.5" />
               Registrar pagamento
             </Button>
-          )
-        }
-      />
+          )}
+        </div>
+      ) : (
+        <PageHeader
+          eyebrow="Financeiro"
+          title="Pagamentos e sinais"
+          description="Todo valor recebido é registrado com forma de pagamento, data e vínculo com fatura ou agendamento."
+          actions={
+            can("payments.edit") && (
+              <Button onClick={() => setNewOpen(true)}>
+                <Plus className="mr-2 size-4" />
+                Registrar pagamento
+              </Button>
+            )
+          }
+        />
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Total recebido" value={money(data.received ?? 0)} tone="positive" />
@@ -1130,6 +1188,178 @@ export function Payments() {
 }
 
 // ---------------------------------------------------------------------------
+// Faturas + pagamentos (seção unificada)
+// ---------------------------------------------------------------------------
+
+type StatementRow = {
+  id: string;
+  date: string;
+  entry: string;
+  doc: string;
+  client: string;
+  method: string;
+  debit: number;
+  credit: number;
+};
+
+/**
+ * Billing screen: invoices and payments used to live in two separate screens,
+ * which forced the team to bounce between them to receive a single invoice.
+ * They now share one section, one header and a unified ledger.
+ */
+export function Billing() {
+  const { orgId } = useApp();
+  const [params, setParams] = useSearchParams();
+  // The tab lives in the URL so links such as /app/faturas?aba=pagamentos
+  // (from the dashboard) open the right view without state syncing.
+  const tab = params.get("aba") === "pagamentos" ? "pagamentos" : params.get("aba") === "extrato" ? "extrato" : "faturas";
+  const setTab = (value: string) =>
+    setParams(value === "faturas" ? {} : { aba: value }, { replace: true });
+
+  const windowStart = addDays(todayISO(), -365);
+  const invoices = useQuery(
+    api.invoices.listInvoices,
+    orgId ? { orgId, from: windowStart, to: todayISO() } : "skip",
+  );
+  const payments = useQuery(
+    api.payments.listPayments,
+    orgId ? { orgId, from: windowStart, to: todayISO() } : "skip",
+  );
+
+  if (!orgId) return <LoadingBlock rows={5} />;
+
+  const statement: StatementRow[] = [
+    ...(invoices?.rows ?? []).map((row) => ({
+      id: `fatura-${row._id}`,
+      date: row.issueDate,
+      entry: "Fatura emitida",
+      doc: row.number,
+      client: row.clientName,
+      method: "—",
+      debit: row.status === "cancelled" ? 0 : row.total,
+      credit: 0,
+    })),
+    ...(payments?.rows ?? []).map((row) => ({
+      id: `pagamento-${row._id}`,
+      date: row.date,
+      entry:
+        row.kind === "reembolso" ? "Estorno" : row.kind === "sinal" ? "Sinal" : "Pagamento",
+      doc: row.invoiceNumber ?? "—",
+      client: row.clientName,
+      method: PAYMENT_METHOD[row.method] ?? row.method,
+      debit: 0,
+      credit: row.kind === "reembolso" ? -row.amount : row.amount,
+    })),
+  ].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+
+  const invoiced = (invoices?.rows ?? []).reduce(
+    (acc, row) => acc + (row.status === "cancelled" ? 0 : row.total),
+    0,
+  );
+  const received = statement.reduce((acc, row) => acc + row.credit, 0);
+  const outstanding = (invoices?.rows ?? []).reduce(
+    (acc, row) => acc + (row.status === "cancelled" ? 0 : row.outstanding),
+    0,
+  );
+
+  return (
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Financeiro"
+        title="Faturas e pagamentos"
+        description="Faturamento e recebimentos em uma única seção: emita a fatura, registre o pagamento e acompanhe o extrato unificado dos lançamentos."
+      />
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Faturado (12 meses)" value={money(invoiced)} />
+        <StatCard label="Recebido (12 meses)" value={money(received)} tone="positive" />
+        <StatCard
+          label="Saldo em aberto"
+          value={money(outstanding)}
+          tone={outstanding > 0 ? "warning" : "neutral"}
+          hint="Faturas emitidas nos últimos 12 meses"
+        />
+        <StatCard label="Lançamentos no extrato" value={statement.length} />
+      </div>
+
+      <Tabs value={tab} onValueChange={setTab} className="space-y-4">
+        <TabsList className="glass-soft flex-wrap">
+          <TabsTrigger value="faturas">Faturas</TabsTrigger>
+          <TabsTrigger value="pagamentos">Pagamentos</TabsTrigger>
+          <TabsTrigger value="extrato">Extrato unificado</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="faturas">
+          <InvoicesSection embedded />
+        </TabsContent>
+
+        <TabsContent value="pagamentos">
+          <PaymentsSection embedded />
+        </TabsContent>
+
+        <TabsContent value="extrato" className="space-y-4">
+          <GlassCard>
+            <SectionTitle
+              title="Extrato unificado"
+              description="Faturas emitidas e pagamentos recebidos na mesma linha do tempo, dos últimos 12 meses."
+            />
+            <DataTable
+              dense
+              keyOf={(row: StatementRow) => row.id}
+              rows={statement}
+              empty={
+                <EmptyState
+                  title="Nenhum lançamento no período"
+                  description="Emita uma fatura ou registre um pagamento para começar."
+                />
+              }
+              columns={[
+                { key: "date", header: "Data", render: (row: StatementRow) => formatDate(row.date) },
+                {
+                  key: "entry",
+                  header: "Lançamento",
+                  render: (row: StatementRow) => (
+                    <Badge variant="outline">{row.entry}</Badge>
+                  ),
+                },
+                { key: "doc", header: "Documento" },
+                { key: "client", header: "Cliente" },
+                { key: "method", header: "Forma" },
+                {
+                  key: "debit",
+                  header: "Faturado",
+                  align: "right",
+                  render: (row: StatementRow) =>
+                    row.debit ? money(row.debit) : <span className="text-muted-foreground">—</span>,
+                },
+                {
+                  key: "credit",
+                  header: "Recebido",
+                  align: "right",
+                  render: (row: StatementRow) =>
+                    row.credit ? (
+                      <span className={row.credit < 0 ? "text-rose-600" : "text-emerald-700"}>
+                        {money(row.credit)}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    ),
+                },
+              ]}
+            />
+          </GlassCard>
+
+          <InfoBanner>
+            O extrato é somente leitura. Correções em faturas usam “Ajuste autorizado” e
+            estornos são registrados como lançamento próprio, sempre com trilha de auditoria.
+          </InfoBanner>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Expenses
 // ---------------------------------------------------------------------------
 
@@ -1165,7 +1395,8 @@ export function Expenses() {
   if (data === undefined) return <LoadingBlock rows={4} />;
 
   const categories = context?.org?.expenseCategories ?? [];
-  const byCategory: Record<string, number> = data.totals.byCategory ?? {};
+  const byCategory: { category: string; amount: number }[] = data.totals.byCategory ?? [];
+  const topCategory = byCategory[0];
 
   return (
     <div className="space-y-5">
@@ -1217,14 +1448,8 @@ export function Expenses() {
         />
         <StatCard
           label="Maior categoria"
-          value={
-            Object.entries(byCategory).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—"
-          }
-          hint={
-            Object.entries(byCategory).sort((a, b) => b[1] - a[1])[0]
-              ? money(Object.entries(byCategory).sort((a, b) => b[1] - a[1])[0][1])
-              : undefined
-          }
+          value={topCategory?.category ?? "—"}
+          hint={topCategory ? money(topCategory.amount) : undefined}
         />
       </div>
 
@@ -2002,11 +2227,22 @@ export function Quotes() {
               <div key={index} className="flex flex-wrap items-center gap-2">
                 <Select
                   value={item.serviceId}
-                  onValueChange={(value) =>
+                  onValueChange={(value) => {
+                    // Select a service and its regular price is shown right away,
+                    // instead of leaving the value field empty.
+                    const service = (services ?? []).find((s: any) => s._id === value);
                     setItems((prev) =>
-                      prev.map((entry, i) => (i === index ? { ...entry, serviceId: value } : entry)),
-                    )
-                  }
+                      prev.map((entry, i) =>
+                        i === index
+                          ? {
+                              ...entry,
+                              serviceId: value,
+                              unitPrice: service ? centsToInput(service.price) : "",
+                            }
+                          : entry,
+                      ),
+                    );
+                  }}
                 >
                   <SelectTrigger className="min-w-[12rem] flex-1">
                     <SelectValue />
@@ -2014,7 +2250,7 @@ export function Quotes() {
                   <SelectContent>
                     {(services ?? []).map((service: any) => (
                       <SelectItem key={service._id} value={service._id}>
-                        {service.name}
+                        {service.name} · {money(service.price)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -2040,12 +2276,17 @@ export function Quotes() {
               type="button"
               variant="outline"
               size="sm"
-              onClick={() =>
+              onClick={() => {
+                const first = (services ?? [])[0];
                 setItems((prev) => [
                   ...prev,
-                  { serviceId: (services ?? [])[0]?._id ?? "", quantity: 1, unitPrice: "" },
-                ])
-              }
+                  {
+                    serviceId: first?._id ?? "",
+                    quantity: 1,
+                    unitPrice: first ? centsToInput(first.price) : "",
+                  },
+                ]);
+              }}
             >
               <Plus className="mr-1.5 size-3.5" />
               Adicionar item

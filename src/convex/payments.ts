@@ -541,7 +541,7 @@ export const listExpenses = query({
   },
   handler: async (ctx, args) => {
     const member = await getMembership(ctx, args.orgId);
-    if (!member) return { rows: [], totals: { paid: 0, pending: 0, byCategory: {} } };
+    if (!member) return { rows: [], totals: { paid: 0, pending: 0, all: 0, byCategory: [] } };
     let rows = await ctx.db
       .query("expenses")
       .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
@@ -557,10 +557,17 @@ export const listExpenses = query({
       .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
       .collect();
 
-    const byCategory: Record<string, number> = {};
+    // Categories are free text typed by the user, so they cannot be used as
+    // object keys: Convex only allows ASCII field names and rejects values such
+    // as "Energia elétrica". Aggregate into an explicit list instead.
+    const categoryTotals = new Map<string, number>();
     for (const r of rows) {
-      byCategory[r.category] = (byCategory[r.category] ?? 0) + r.amount;
+      categoryTotals.set(r.category, (categoryTotals.get(r.category) ?? 0) + r.amount);
     }
+    const byCategory = Array.from(categoryTotals, ([category, amount]) => ({
+      category,
+      amount,
+    })).sort((a, b) => b.amount - a.amount);
 
     return {
       rows: rows

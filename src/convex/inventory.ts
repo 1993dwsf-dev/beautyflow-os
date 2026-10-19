@@ -173,6 +173,19 @@ function addDaysISO(iso: string, days: number): string {
   return dt.toISOString().slice(0, 10);
 }
 
+/** Internal stock code shown only in exports; the form no longer asks for it. */
+function generateSku(name: string) {
+  const base = name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 12);
+  const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `${base || "PROD"}-${suffix}`;
+}
+
 export const saveProduct = mutation({
   args: {
     orgId: v.id("organizations"),
@@ -180,7 +193,8 @@ export const saveProduct = mutation({
     name: v.string(),
     brand: v.optional(v.string()),
     categoryId: v.optional(v.id("productCategories")),
-    sku: v.string(),
+    /** Optional now that the form no longer asks for it; generated when absent. */
+    sku: v.optional(v.string()),
     barcode: v.optional(v.string()),
     supplierId: v.optional(v.id("suppliers")),
     cost: v.number(),
@@ -197,16 +211,21 @@ export const saveProduct = mutation({
     const { userId, member } = await requireMember(ctx, args.orgId, "inventory.edit");
     await assertFeature(ctx, args.orgId, "inventory");
     if (!args.name.trim()) throw new AppError("VALIDATION", "Informe o nome do produto.");
-    if (!args.sku.trim()) throw new AppError("VALIDATION", "Informe o SKU do produto.");
     if (args.cost < 0 || args.price < 0) {
       throw new AppError("VALIDATION", "Os valores não podem ser negativos.");
     }
+
+    const existing = args.productId ? await ctx.db.get(args.productId) : null;
+    if (args.productId && (!existing || existing.orgId !== args.orgId)) {
+      throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
+    }
+
     const payload = {
       orgId: args.orgId,
       name: args.name.trim(),
       brand: args.brand,
       categoryId: args.categoryId,
-      sku: args.sku.trim(),
+      sku: args.sku?.trim() || existing?.sku || generateSku(args.name),
       barcode: args.barcode,
       supplierId: args.supplierId,
       cost: args.cost,
@@ -221,10 +240,6 @@ export const saveProduct = mutation({
     };
 
     if (args.productId) {
-      const existing = await ctx.db.get(args.productId);
-      if (!existing || existing.orgId !== args.orgId) {
-        throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
-      }
       await ctx.db.patch(args.productId, payload);
       await logAudit(ctx, {
         orgId: args.orgId,
