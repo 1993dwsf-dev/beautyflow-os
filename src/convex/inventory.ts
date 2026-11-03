@@ -1,3 +1,4 @@
+import { validateOrgReferences } from "./lib/tenant";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
@@ -16,7 +17,7 @@ import {
 export const listSuppliers = query({
   args: { orgId: v.id("organizations") },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "inventory.view");
     if (!member) return [];
     return await ctx.db
       .query("suppliers")
@@ -39,6 +40,7 @@ export const saveSupplier = mutation({
   },
   handler: async (ctx, args) => {
     const { member } = await requireMember(ctx, args.orgId, "inventory.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     if (!args.name.trim()) throw new AppError("VALIDATION", "Informe o nome do fornecedor.");
     const payload = {
       orgId: args.orgId,
@@ -66,6 +68,7 @@ export const deleteSupplier = mutation({
   args: { orgId: v.id("organizations"), supplierId: v.id("suppliers") },
   handler: async (ctx, args) => {
     await requireMember(ctx, args.orgId, "inventory.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const supplier = await ctx.db.get(args.supplierId);
     if (!supplier || supplier.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
@@ -78,7 +81,7 @@ export const deleteSupplier = mutation({
 export const listProductCategories = query({
   args: { orgId: v.id("organizations") },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "inventory.view");
     if (!member) return [];
     return await ctx.db
       .query("productCategories")
@@ -91,6 +94,7 @@ export const createProductCategory = mutation({
   args: { orgId: v.id("organizations"), name: v.string() },
   handler: async (ctx, args) => {
     const { member } = await requireMember(ctx, args.orgId, "inventory.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     if (!args.name.trim()) throw new AppError("VALIDATION", "Informe o nome da categoria.");
     const id = await ctx.db.insert("productCategories", {
       orgId: args.orgId,
@@ -109,7 +113,7 @@ export const listProducts = query({
     lowStockOnly: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "inventory.view");
     if (!member) return { rows: [], valuation: 0, lowStock: 0, categories: [] };
     const categories = await ctx.db
       .query("productCategories")
@@ -209,6 +213,7 @@ export const saveProduct = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "inventory.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     await assertFeature(ctx, args.orgId, "inventory");
     if (!args.name.trim()) throw new AppError("VALIDATION", "Informe o nome do produto.");
     if (args.cost < 0 || args.price < 0) {
@@ -312,6 +317,7 @@ export const moveStock = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "inventory.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     await assertFeature(ctx, args.orgId, "inventory");
     const product = await ctx.db.get(args.productId);
     if (!product || product.orgId !== args.orgId) {
@@ -388,6 +394,7 @@ export const correctMovement = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "inventory.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const movement = await ctx.db.get(args.movementId);
     if (!movement || movement.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
@@ -439,7 +446,7 @@ export const listMovements = query({
     to: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "inventory.view");
     if (!member) return [];
     let rows;
     if (args.productId) {
@@ -483,7 +490,7 @@ export const consumptionReport = query({
     to: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "inventory.view");
     if (!member) return { rows: [], totalCost: 0 };
     let records = await ctx.db
       .query("serviceConsumptionRecords")
@@ -544,7 +551,7 @@ export const consumptionReport = query({
 export const lowStockAlerts = query({
   args: { orgId: v.id("organizations") },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "inventory.view");
     if (!member) return [];
     const rows = await ctx.db
       .query("products")
@@ -559,7 +566,7 @@ export const lowStockAlerts = query({
 export const inventoryValuation = query({
   args: { orgId: v.id("organizations") },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "inventory.view");
     if (!member) return { cost: 0, retail: 0, items: 0 };
     const rows = await ctx.db
       .query("products")
@@ -576,7 +583,7 @@ export const inventoryValuation = query({
 export const productOptions = query({
   args: { orgId: v.id("organizations") },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "inventory.view");
     if (!member) return [];
     return await ctx.db
       .query("products")

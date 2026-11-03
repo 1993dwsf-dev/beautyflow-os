@@ -3,6 +3,7 @@ import { query, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
   addDaysISO,
+  requireMember,
   diffDaysISO,
   getMembership,
   pct,
@@ -111,7 +112,7 @@ function collectedIn(payments: Doc<"payments">[], from: string, to: string) {
 export const dashboard = query({
   args: { orgId: v.id("organizations"), from: v.string(), to: v.string() },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "reports.financial");
     if (!member) return null;
     const data = await loadOrgData(ctx, args.orgId);
     const org = data.org;
@@ -423,7 +424,7 @@ export const dashboard = query({
 export const reportBundle = query({
   args: { orgId: v.id("organizations"), from: v.string(), to: v.string() },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "reports.financial");
     if (!member) return null;
     const data = await loadOrgData(ctx, args.orgId);
     const inRange = (d: string) => d >= args.from && d <= args.to;
@@ -661,6 +662,10 @@ export const exportDataset = query({
   handler: async (ctx, args) => {
     const member = await getMembership(ctx, args.orgId);
     if (!member) return { columns: [], rows: [], filename: "export.csv" };
+    const exportPermissions = { clientes: "clients.view", agendamentos: "appointments.view", servicos: "services.view", equipe: "staff.view", produtos: "inventory.view", movimentacoes: "inventory.view", receitas: "reports.financial", despesas: "reports.financial", pagamentos: "reports.financial", comissoes: "commissions.view" } as const;
+    const permission = exportPermissions[args.dataset as keyof typeof exportPermissions];
+    if (!permission) return { columns: [], rows: [], filename: "export.csv" };
+    await requireMember(ctx, args.orgId, permission);
     const data = await loadOrgData(ctx, args.orgId);
     const inRange = (d: string) =>
       (!args.from || d >= args.from) && (!args.to || d <= args.to);

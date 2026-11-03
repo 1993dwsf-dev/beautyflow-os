@@ -43,6 +43,7 @@ export const publicAvailability = query({
       .withIndex("by_slug", (q) => q.eq("publicBookingSlug", args.slug))
       .first();
     if (!org || !org.publicBookingEnabled) return { slots: [], duration: 0 };
+    await loadPublicOrg(ctx, args.slug);
 
     const services: Doc<"services">[] = [];
     for (const id of args.serviceIds) {
@@ -112,7 +113,7 @@ export const createPublicBooking = mutation({
     if (digits.length < 10 || digits.length > 11) {
       throw new AppError("VALIDATION", "Informe um telefone válido com DDD.");
     }
-    if (!args.serviceIds.length) {
+    if (!args.serviceIds.length || args.serviceIds.length > 10 || new Set(args.serviceIds).size !== args.serviceIds.length) {
       throw new AppError("VALIDATION", "Selecione pelo menos um serviço.");
     }
 
@@ -230,6 +231,7 @@ export const publicStaffForServices = query({
       .withIndex("by_slug", (q) => q.eq("publicBookingSlug", args.slug))
       .first();
     if (!org || !org.publicBookingEnabled) return [];
+    await loadPublicOrg(ctx, args.slug);
     const staff = await ctx.db
       .query("staff")
       .withIndex("by_org", (q) => q.eq("orgId", org._id))
@@ -237,7 +239,8 @@ export const publicStaffForServices = query({
     const services: Doc<"services">[] = [];
     for (const id of args.serviceIds) {
       const s = await ctx.db.get(id);
-      if (s) services.push(s);
+      if (!s || s.orgId !== org._id || !s.active) throw new AppError("VALIDATION", "Serviço indisponível.");
+      services.push(s);
     }
     return staff
       .filter(

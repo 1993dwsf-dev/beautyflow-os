@@ -155,8 +155,8 @@ export default function Dashboard() {
   if (data === null) {
     return (
       <EmptyState
-        title="Não foi possível carregar o painel"
-        description="Verifique se você ainda faz parte desta organização."
+        title="Acesse a agenda pelo menu"
+        description="O painel financeiro é reservado à proprietária e às pessoas com permissão financeira."
       />
     );
   }

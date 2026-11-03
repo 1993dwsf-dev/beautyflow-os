@@ -1,3 +1,4 @@
+import { validateOrgReferences } from "./lib/tenant";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -8,6 +9,7 @@ import {
   getUserId,
   logAudit,
   requireMember,
+  getMembership,
   sum,
   toMinutes,
   todayInTz,
@@ -103,6 +105,11 @@ export const createDemoWorkspace = mutation({
   handler: async (ctx) => {
     const userId = await getUserId(ctx);
     if (!userId) throw new AppError("UNAUTHENTICATED", "Você precisa entrar na sua conta para continuar.");
+    const memberships = await ctx.db.query("organizationMembers").withIndex("by_user", q => q.eq("userId", userId)).collect();
+    for (const m of memberships) {
+      const existing = await ctx.db.get(m.orgId);
+      if (m.active && existing?.isDemo) return { orgId: existing._id };
+    }
     const user = await ctx.db.get(userId);
     const today = todayInTz();
 
@@ -598,6 +605,7 @@ export const seedDemoHistory = mutation({
   args: { orgId: v.id("organizations") },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "settings.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const org = await ctx.db.get(args.orgId);
     if (!org) throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
     const today = todayInTz(org.timezone);
@@ -911,6 +919,7 @@ export const resetDemoData = mutation({
   args: { orgId: v.id("organizations") },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "settings.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const tables = [
       "appointments",
       "treatmentRecords",
@@ -977,6 +986,7 @@ export const resetDemoData = mutation({
 export const demoStatus = query({
   args: { orgId: v.id("organizations") },
   handler: async (ctx, args) => {
+    if (!await getMembership(ctx, args.orgId)) return null;
     const org = await ctx.db.get(args.orgId);
     if (!org) return null;
     const counts = {

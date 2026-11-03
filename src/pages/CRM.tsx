@@ -42,7 +42,7 @@ import {
   todayISO,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery, useAction } from "convex/react";
 import {
   Camera,
   CheckCircle2,
@@ -1629,7 +1629,7 @@ function UploadPhotoDialog({
 }) {
   const services = useQuery(api.services.serviceOptions, orgId ? { orgId } : "skip");
   const staff = useQuery(api.staff.staffOptions, orgId ? { orgId } : "skip");
-  const generateUrl = useMutation(api.crm.generatePhotoUploadUrl);
+  const uploadPhoto = useAction(api.crm.uploadPhotoFile);
   const savePhoto = useMutation(api.crm.savePhoto);
 
   const [clientId, setClientId] = useState("");
@@ -1648,7 +1648,7 @@ function UploadPhotoDialog({
       onOpenChange={(value) => !value && onClose()}
       size="lg"
       title="Enviar foto de tratamento"
-      description="As fotos ficam em armazenamento privado e não são acessíveis publicamente."
+      description="Galeria restrita à equipe autorizada. Não compartilhe links de fotos sem o consentimento da cliente."
       submitLabel="Enviar foto"
       loading={busy}
       error={error}
@@ -1657,18 +1657,8 @@ function UploadPhotoDialog({
         setError(null);
         try {
           if (!clientId) throw new Error("Selecione a cliente.");
-          let storageId: Id<"_storage"> | undefined;
-          if (file) {
-            const uploadUrl = await generateUrl({ orgId });
-            const response = await fetch(uploadUrl, {
-              method: "POST",
-              headers: { "Content-Type": file.type || "image/jpeg" },
-              body: file,
-            });
-            if (!response.ok) throw new Error("Não foi possível enviar o arquivo. Tente novamente.");
-            const payload = (await response.json()) as { storageId: Id<"_storage"> };
-            storageId = payload.storageId;
-          }
+          if (!file || file.size > 4 * 1024 * 1024) throw new Error("Selecione uma foto JPEG, PNG ou WebP de até 4 MB.");
+          const storageId = await uploadPhoto({ orgId, data: await file.arrayBuffer(), contentType: file.type });
           await savePhoto({
             orgId,
             clientId: clientId as Id<"clients">,

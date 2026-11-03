@@ -1,5 +1,7 @@
+import { validateOrgReferences } from "./lib/tenant";
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, action, internalQuery, internalMutation } from "./_generated/server";
+import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import {
   AppError,
@@ -22,13 +24,14 @@ export const listTreatmentRecords = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "health.view");
     if (!member) return [];
     let rows;
     if (args.clientId) {
       rows = await ctx.db
         .query("treatmentRecords")
         .withIndex("by_client", (q) => q.eq("clientId", args.clientId!))
+        .filter(q => q.eq(q.field("orgId"), args.orgId))
         .collect();
     } else {
       rows = await ctx.db
@@ -86,6 +89,7 @@ export const createTreatmentRecord = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "appointments.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const client = await ctx.db.get(args.clientId);
     if (!client || client.orgId !== args.orgId) {
       throw new AppError("VALIDATION", "Cliente não encontrada.");
@@ -156,6 +160,7 @@ export const updateTreatmentRecord = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "appointments.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const record = await ctx.db.get(args.recordId);
     if (!record || record.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
@@ -187,7 +192,7 @@ function addDays(iso: string, days: number): string {
 export const listForms = query({
   args: { orgId: v.id("organizations") },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "clients.view");
     if (!member) return [];
     return await ctx.db
       .query("consultationForms")
@@ -216,6 +221,7 @@ export const saveForm = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "settings.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     if (!args.name.trim()) throw new AppError("VALIDATION", "Informe o nome do formulário.");
     if (!args.fields.length) {
       throw new AppError("VALIDATION", "Adicione pelo menos um campo ao formulário.");
@@ -265,7 +271,7 @@ export const listResponses = query({
     canViewSensitive: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "health.view");
     if (!member) return [];
     const allowed =
       member.role === "owner" ||
@@ -277,6 +283,7 @@ export const listResponses = query({
       rows = await ctx.db
         .query("consultationResponses")
         .withIndex("by_client", (q) => q.eq("clientId", args.clientId!))
+        .filter(q => q.eq(q.field("orgId"), args.orgId))
         .collect();
     } else {
       rows = await ctx.db
@@ -320,6 +327,7 @@ export const submitConsultationResponse = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "consent.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const form = await ctx.db.get(args.formId);
     if (!form || form.orgId !== args.orgId) {
       throw new AppError("VALIDATION", "Formulário não encontrado.");
@@ -373,7 +381,7 @@ export const submitConsultationResponse = mutation({
 export const listConsents = query({
   args: { orgId: v.id("organizations"), clientId: v.optional(v.id("clients")) },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "consent.view");
     if (!member) return [];
     const rows = await ctx.db
       .query("consentRecords")
@@ -405,6 +413,7 @@ export const recordConsent = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "consent.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const client = await ctx.db.get(args.clientId);
     if (!client || client.orgId !== args.orgId) {
       throw new AppError("VALIDATION", "Cliente não encontrada.");
@@ -437,18 +446,41 @@ export const recordConsent = mutation({
 // Photos (secure gallery)
 // ---------------------------------------------------------------------------
 
-export const generatePhotoUploadUrl = mutation({
+export const authorizePhotoUpload = internalQuery({
   args: { orgId: v.id("organizations") },
   handler: async (ctx, args) => {
     await requireMember(ctx, args.orgId, "photos.view");
-    return await ctx.storage.generateUploadUrl();
+    return (await requireMember(ctx, args.orgId, "consent.edit")).userId;
+  },
+});
+export const registerPhotoUpload = internalMutation({
+  args: { orgId: v.id("organizations"), storageId: v.id("_storage") },
+  handler: async (ctx, args) => {
+    await requireMember(ctx, args.orgId, "photos.view");
+    const { userId } = await requireMember(ctx, args.orgId, "consent.edit");
+    await ctx.db.insert("photoUploads", { ...args, uploadedBy: userId, createdAt: Date.now() });
+  },
+});
+export const uploadPhotoFile = action({
+  args: { orgId: v.id("organizations"), data: v.bytes(), contentType: v.string() },
+  handler: async (ctx, args): Promise<Id<"_storage">> => {
+    await ctx.runQuery(internal.crm.authorizePhotoUpload, { orgId: args.orgId });
+    const bytes = new Uint8Array(args.data);
+    const jpeg = bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
+    const png = bytes.slice(0, 8).join(",") === "137,80,78,71,13,10,26,10";
+    const webp = String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" && String.fromCharCode(...bytes.slice(8, 12)) === "WEBP";
+    if (!bytes.length || bytes.length > 4 * 1024 * 1024 || !((args.contentType === "image/jpeg" && jpeg) || (args.contentType === "image/png" && png) || (args.contentType === "image/webp" && webp))) throw new Error("Envie uma foto JPEG, PNG ou WebP de até 4 MB.");
+    const storageId = await ctx.storage.store(new Blob([args.data], { type: args.contentType }));
+    try { await ctx.runMutation(internal.crm.registerPhotoUpload, { orgId: args.orgId, storageId }); }
+    catch (error) { await ctx.storage.delete(storageId); throw error; }
+    return storageId;
   },
 });
 
 export const listPhotos = query({
   args: { orgId: v.id("organizations"), clientId: v.optional(v.id("clients")) },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "photos.view");
     if (!member) return [];
     const rows = await ctx.db
       .query("clientPhotos")
@@ -494,18 +526,26 @@ export const savePhoto = mutation({
     consentPublic: v.boolean(),
   },
   handler: async (ctx, args) => {
-    const { userId, member } = await requireMember(ctx, args.orgId, "photos.view");
+    const { userId, member } = await requireMember(ctx, args.orgId, "consent.edit");
+    await requireMember(ctx, args.orgId, "photos.view");
+    await validateOrgReferences(ctx, args.orgId, args);
     const client = await ctx.db.get(args.clientId);
     if (!client || client.orgId !== args.orgId) {
       throw new AppError("VALIDATION", "Cliente não encontrada.");
     }
+    if (!args.storageId || args.url) throw new AppError("VALIDATION", "Envie um arquivo de foto pelo formulário.");
+    const upload = await ctx.db.query("photoUploads").withIndex("by_storage", q => q.eq("storageId", args.storageId!)).first();
+    if (!upload || upload.orgId !== args.orgId || upload.uploadedBy !== userId) throw new AppError("FORBIDDEN", ERR.PERMISSION);
+    await ctx.db.delete(upload._id);
     if (args.consentPublic) {
+      await requireMember(ctx, args.orgId, "photos.share");
       const granted = (
         await ctx.db
           .query("consentRecords")
           .withIndex("by_client", (q) => q.eq("clientId", args.clientId))
-          .collect()
-      ).some((c) => c.type === "imagem_publica" && c.granted);
+          .filter(q => q.eq(q.field("orgId"), args.orgId))
+        .collect()
+      ).filter(c => c.orgId === args.orgId && c.type === "imagem_publica").sort((a, b) => b.createdAt - a.createdAt || b._creationTime - a._creationTime)[0]?.granted === true;
       if (!granted) {
         throw new AppError(
           "CONSENT",
@@ -552,17 +592,20 @@ export const updatePhotoConsent = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "photos.share");
+    await validateOrgReferences(ctx, args.orgId, args);
     const photo = await ctx.db.get(args.photoId);
     if (!photo || photo.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
     }
     if (args.consentPublic) {
+      await requireMember(ctx, args.orgId, "photos.share");
       const granted = (
         await ctx.db
           .query("consentRecords")
           .withIndex("by_client", (q) => q.eq("clientId", photo.clientId))
-          .collect()
-      ).some((c) => c.type === "imagem_publica" && c.granted);
+          .filter(q => q.eq(q.field("orgId"), args.orgId))
+        .collect()
+      ).filter(c => c.orgId === args.orgId && c.type === "imagem_publica").sort((a, b) => b.createdAt - a.createdAt || b._creationTime - a._creationTime)[0]?.granted === true;
       if (!granted) {
         throw new AppError(
           "CONSENT",
@@ -590,7 +633,9 @@ export const updatePhotoConsent = mutation({
 export const deletePhoto = mutation({
   args: { orgId: v.id("organizations"), photoId: v.id("clientPhotos") },
   handler: async (ctx, args) => {
-    const { userId, member } = await requireMember(ctx, args.orgId, "photos.view");
+    const { userId, member } = await requireMember(ctx, args.orgId, "consent.edit");
+    await requireMember(ctx, args.orgId, "photos.view");
+    await validateOrgReferences(ctx, args.orgId, args);
     const photo = await ctx.db.get(args.photoId);
     if (!photo || photo.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
@@ -616,7 +661,7 @@ export const deletePhoto = mutation({
 export const listAftercareTemplates = query({
   args: { orgId: v.id("organizations") },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "clients.view");
     if (!member) return [];
     const rows = await ctx.db
       .query("aftercareTemplates")
@@ -643,6 +688,7 @@ export const saveAftercareTemplate = mutation({
   },
   handler: async (ctx, args) => {
     const { member } = await requireMember(ctx, args.orgId, "settings.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     if (!args.name.trim() || !args.text.trim()) {
       throw new AppError("VALIDATION", "Informe o nome e o texto das recomendações.");
     }

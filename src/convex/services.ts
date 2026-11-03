@@ -1,3 +1,4 @@
+import { validateOrgReferences } from "./lib/tenant";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import {
@@ -26,7 +27,7 @@ export const DEFAULT_CATEGORIES = [
 export const listCategories = query({
   args: { orgId: v.id("organizations") },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "services.view");
     if (!member) return [];
     return await ctx.db
       .query("serviceCategories")
@@ -39,6 +40,7 @@ export const createCategory = mutation({
   args: { orgId: v.id("organizations"), name: v.string(), color: v.string() },
   handler: async (ctx, args) => {
     await requireMember(ctx, args.orgId, "services.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     if (!args.name.trim()) throw new AppError("VALIDATION", "Informe o nome da categoria.");
     return await ctx.db.insert("serviceCategories", {
       orgId: args.orgId,
@@ -52,7 +54,7 @@ export const createCategory = mutation({
 export const listServices = query({
   args: { orgId: v.id("organizations"), includeInactive: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "services.view");
     if (!member) return { rows: [], categories: [] };
     const categories = await ctx.db
       .query("serviceCategories")
@@ -97,7 +99,7 @@ export const listServices = query({
 export const serviceOptions = query({
   args: { orgId: v.id("organizations") },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "services.view");
     if (!member) return [];
     const rows = await ctx.db
       .query("services")
@@ -129,6 +131,7 @@ export const createService = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "services.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     if (!args.name.trim()) throw new AppError("VALIDATION", "Informe o nome do serviço.");
     if (args.price < 0) throw new AppError("VALIDATION", "O preço não pode ser negativo.");
     if (args.durationMin <= 0) {
@@ -191,6 +194,7 @@ export const updateService = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "services.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const service = await ctx.db.get(args.serviceId);
     if (!service || service.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
@@ -212,7 +216,7 @@ export const updateService = mutation({
 export const listPackages = query({
   args: { orgId: v.id("organizations") },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "services.view");
     if (!member) return [];
     return await ctx.db
       .query("servicePackages")
@@ -242,6 +246,7 @@ export const savePackage = mutation({
   },
   handler: async (ctx, args) => {
     const { member } = await requireMember(ctx, args.orgId, "services.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     if (!args.name.trim()) throw new AppError("VALIDATION", "Informe o nome do pacote.");
     if (!args.items.length) {
       throw new AppError("VALIDATION", "Adicione pelo menos um serviço ao pacote.");
@@ -283,6 +288,7 @@ export const deletePackage = mutation({
   args: { orgId: v.id("organizations"), packageId: v.id("servicePackages") },
   handler: async (ctx, args) => {
     await requireMember(ctx, args.orgId, "services.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const pkg = await ctx.db.get(args.packageId);
     if (!pkg || pkg.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
@@ -299,7 +305,7 @@ export const deletePackage = mutation({
 export const listConsumptionRules = query({
   args: { orgId: v.id("organizations"), serviceId: v.optional(v.id("services")) },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "services.view");
     if (!member) return [];
     const rows = await ctx.db
       .query("serviceConsumptionRules")
@@ -334,6 +340,7 @@ export const saveConsumptionRule = mutation({
   },
   handler: async (ctx, args) => {
     const { member } = await requireMember(ctx, args.orgId, "services.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     if (args.quantity <= 0) {
       throw new AppError("VALIDATION", "A quantidade consumida deve ser maior que zero.");
     }
@@ -361,6 +368,7 @@ export const deleteConsumptionRule = mutation({
   args: { orgId: v.id("organizations"), ruleId: v.id("serviceConsumptionRules") },
   handler: async (ctx, args) => {
     await requireMember(ctx, args.orgId, "services.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const rule = await ctx.db.get(args.ruleId);
     if (!rule || rule.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);

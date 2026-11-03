@@ -1,4 +1,8 @@
-.env.local
 node_modules
 dist
-src/convex/_generated
+.env*
+!.env.example
+.convex
+.wrangler
+artifacts
+*.tsbuildinfo

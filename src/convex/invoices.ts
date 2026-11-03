@@ -1,3 +1,4 @@
+import { validateOrgReferences } from "./lib/tenant";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -57,13 +58,14 @@ export const listInvoices = query({
     clientId: v.optional(v.id("clients")),
   },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "invoices.view");
     if (!member) return { rows: [], totals: { issued: 0, paid: 0, outstanding: 0 } };
     let rows: Doc<"invoices">[];
     if (args.clientId) {
       rows = await ctx.db
         .query("invoices")
         .withIndex("by_client", (q) => q.eq("clientId", args.clientId!))
+        .filter(q => q.eq(q.field("orgId"), args.orgId))
         .collect();
     } else {
       rows = await ctx.db
@@ -120,7 +122,7 @@ export const listInvoices = query({
 export const invoiceDetail = query({
   args: { orgId: v.id("organizations"), invoiceId: v.id("invoices") },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "invoices.view");
     if (!member) return null;
     const inv = await ctx.db.get(args.invoiceId);
     if (!inv || inv.orgId !== args.orgId) return null;
@@ -155,6 +157,7 @@ export const createInvoiceFromAppointment = mutation({
   args: { orgId: v.id("organizations"), appointmentId: v.id("appointments") },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "invoices.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     await assertFeature(ctx, args.orgId, "finance");
     const apt = await ctx.db.get(args.appointmentId);
     if (!apt || apt.orgId !== args.orgId) {
@@ -261,10 +264,13 @@ export const createInvoice = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "invoices.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     if (!args.items.length) {
       throw new AppError("VALIDATION", "Adicione pelo menos um item à fatura.");
     }
     const org = await ctx.db.get(args.orgId);
+    if (args.items.some(i => !Number.isSafeInteger(i.quantity) || i.quantity <= 0 || !Number.isSafeInteger(i.unitPrice) || i.unitPrice < 0 || i.total !== i.quantity * i.unitPrice)) throw new AppError("VALIDATION", "Confira as quantidades e valores dos itens.");
+    if (!Number.isSafeInteger(args.discount) || args.discount < 0) throw new AppError("VALIDATION", "Desconto inválido.");
     const subtotal = sum(args.items.map((i) => i.total));
     if (args.discount > subtotal) {
       throw new AppError("VALIDATION", "O desconto não pode superar o subtotal.");
@@ -316,6 +322,7 @@ export const updateInvoice = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "invoices.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const inv = await ctx.db.get(args.invoiceId);
     if (!inv || inv.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
@@ -330,7 +337,7 @@ export const updateInvoice = mutation({
     const items = args.items ?? inv.items;
     const subtotal = sum(items.map((i) => i.total));
     const discount = args.discount ?? inv.discount;
-    if (discount > subtotal) {
+    if (!Number.isSafeInteger(discount) || discount < 0 || items.some(i => !Number.isSafeInteger(i.quantity) || i.quantity <= 0 || !Number.isSafeInteger(i.unitPrice) || i.unitPrice < 0 || i.total !== i.quantity * i.unitPrice) || discount > subtotal) {
       throw new AppError("VALIDATION", "O desconto não pode superar o subtotal.");
     }
     const tax = org?.taxPct
@@ -368,6 +375,7 @@ export const addInvoiceAdjustment = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "invoices.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const inv = await ctx.db.get(args.invoiceId);
     if (!inv || inv.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
@@ -386,12 +394,19 @@ export const addInvoiceAdjustment = mutation({
       },
     ];
     const subtotal = sum(items.map((i) => i.total));
-    const tax = inv.tax ? 0 : 0;
+    if (!Number.isSafeInteger(args.amount) || inv.status === "cancelled" || inv.status === "paid" || inv.status === "refunded") throw new AppError("LOCKED", "Este documento não pode receber ajustes. Confira a fatura e os pagamentos.");
+    const org = await ctx.db.get(args.orgId);
+    const tax = Math.round((subtotal - inv.discount) * (org?.taxPct ?? 0) / 100);
     const total = subtotal - inv.discount + tax;
+    const paid = await paidForInvoice(ctx, args.invoiceId);
+    if (total < paid || total < 0) throw new AppError("VALIDATION", "O ajuste não pode deixar o total abaixo do valor já pago.");
     await ctx.db.patch(args.invoiceId, {
       items,
       subtotal,
       total,
+      tax,
+      status: total === paid && paid > 0 ? "paid" : inv.status,
+      locked: total === paid && paid > 0,
       notes: `${inv.notes ?? ""}\nAjuste autorizado por ${member.name}: ${args.reason}`.trim(),
     });
     await logAudit(ctx, {
@@ -415,6 +430,7 @@ export const cancelInvoice = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "invoices.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const inv = await ctx.db.get(args.invoiceId);
     if (!inv || inv.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
@@ -463,6 +479,7 @@ export const remindInvoice = mutation({
   args: { orgId: v.id("organizations"), invoiceId: v.id("invoices") },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "invoices.view");
+    await validateOrgReferences(ctx, args.orgId, args);
     const inv = await ctx.db.get(args.invoiceId);
     if (!inv || inv.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
@@ -499,13 +516,14 @@ export const listQuotes = query({
     clientId: v.optional(v.id("clients")),
   },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "appointments.view");
     if (!member) return [];
     let rows: Doc<"quotes">[];
     if (args.clientId) {
       rows = await ctx.db
         .query("quotes")
         .withIndex("by_client", (q) => q.eq("clientId", args.clientId!))
+        .filter(q => q.eq(q.field("orgId"), args.orgId))
         .collect();
     } else {
       rows = await ctx.db
@@ -543,9 +561,12 @@ export const saveQuote = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "appointments.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     if (!args.items.length) {
       throw new AppError("VALIDATION", "Adicione pelo menos um item ao orçamento.");
     }
+    if (args.items.some(i => !Number.isSafeInteger(i.quantity) || i.quantity <= 0 || !Number.isSafeInteger(i.unitPrice) || i.unitPrice < 0 || i.total !== i.quantity * i.unitPrice)) throw new AppError("VALIDATION", "Confira as quantidades e valores dos itens.");
+    if (!Number.isSafeInteger(args.discount) || args.discount < 0) throw new AppError("VALIDATION", "Desconto inválido.");
     const subtotal = sum(args.items.map((i) => i.total));
     if (args.discount > subtotal) {
       throw new AppError("VALIDATION", "O desconto não pode superar o subtotal.");
@@ -604,6 +625,7 @@ export const setQuoteStatus = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "appointments.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const quote = await ctx.db.get(args.quoteId);
     if (!quote || quote.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
@@ -633,6 +655,7 @@ export const convertQuoteToAppointment = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "appointments.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const quote = await ctx.db.get(args.quoteId);
     if (!quote || quote.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);

@@ -1,3 +1,4 @@
+import { validateOrgReferences } from "./lib/tenant";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
@@ -21,7 +22,7 @@ import {
 export const loyaltyOverview = query({
   args: { orgId: v.id("organizations") },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "clients.view");
     if (!member) return { accounts: [], totals: { points: 0, clients: 0 }, settings: null };
     const org = await ctx.db.get(args.orgId);
     const accounts = await ctx.db
@@ -77,6 +78,7 @@ export const adjustLoyaltyPoints = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "clients.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     if (!args.reason.trim()) {
       throw new AppError("VALIDATION", "Informe o motivo do ajuste de pontos.");
     }
@@ -145,6 +147,7 @@ export const redeemReward = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "clients.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const account = await ctx.db
       .query("loyaltyAccounts")
       .withIndex("by_client", (q) => q.eq("clientId", args.clientId))
@@ -188,7 +191,7 @@ export const redeemReward = mutation({
 export const listGiftCards = query({
   args: { orgId: v.id("organizations"), status: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "payments.view");
     if (!member) return { rows: [], totals: { sold: 0, outstanding: 0, redeemed: 0 } };
     const rows = await ctx.db
       .query("giftCards")
@@ -253,6 +256,7 @@ export const sellGiftCard = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "payments.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     if (args.value <= 0) {
       throw new AppError("VALIDATION", "O valor do cartão-presente deve ser maior que zero.");
     }
@@ -326,6 +330,7 @@ export const cancelGiftCard = mutation({
   args: { orgId: v.id("organizations"), giftCardId: v.id("giftCards"), reason: v.string() },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "payments.refund");
+    await validateOrgReferences(ctx, args.orgId, args);
     const card = await ctx.db.get(args.giftCardId);
     if (!card || card.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
@@ -354,7 +359,7 @@ export const cancelGiftCard = mutation({
 export const listCampaigns = query({
   args: { orgId: v.id("organizations") },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "marketing.manage");
     if (!member) return [];
     return await ctx.db
       .query("marketingCampaigns")
@@ -383,6 +388,7 @@ export const saveCampaign = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "marketing.manage");
+    await validateOrgReferences(ctx, args.orgId, args);
     if (!args.name.trim()) throw new AppError("VALIDATION", "Informe o nome da campanha.");
     if (args.endDate < args.startDate) {
       throw new AppError("VALIDATION", "A data final não pode ser anterior à data inicial.");
@@ -432,6 +438,7 @@ export const deleteCampaign = mutation({
   args: { orgId: v.id("organizations"), campaignId: v.id("marketingCampaigns") },
   handler: async (ctx, args) => {
     await requireMember(ctx, args.orgId, "marketing.manage");
+    await validateOrgReferences(ctx, args.orgId, args);
     const campaign = await ctx.db.get(args.campaignId);
     if (!campaign || campaign.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
@@ -448,7 +455,7 @@ export const deleteCampaign = mutation({
 export const listFollowUps = query({
   args: { orgId: v.id("organizations"), status: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "clients.view");
     if (!member) return [];
     const rows = await ctx.db
       .query("followUpTasks")
@@ -482,6 +489,7 @@ export const createFollowUp = mutation({
   },
   handler: async (ctx, args) => {
     const { member } = await requireMember(ctx, args.orgId, "clients.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const id = await ctx.db.insert("followUpTasks", {
       orgId: args.orgId,
       clientId: args.clientId,
@@ -505,6 +513,7 @@ export const completeFollowUp = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "clients.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const task = await ctx.db.get(args.taskId);
     if (!task || task.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
@@ -536,7 +545,7 @@ export const retentionDashboard = query({
     inactiveDays: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "clients.view");
     if (!member)
       return {
         due: [],
@@ -694,6 +703,7 @@ export const createRetentionTask = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "clients.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     let created = 0;
     for (const clientId of args.clientIds) {
       await ctx.db.insert("followUpTasks", {

@@ -377,15 +377,18 @@ export function label(map: Record<string, string>, key: string | undefined): str
 // CSV export
 // ---------------------------------------------------------------------------
 
+export function escapeCsv(value: unknown): string {
+  let text = value === null || value === undefined ? "" : String(value);
+  if (typeof value === "string" && /^[=+@-]/.test(text.trimStart())) text = "'" + text;
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
 export function downloadCsv(
   filename: string,
   columns: string[],
   rows: Record<string, unknown>[],
 ) {
-  const escape = (value: unknown) => {
-    const text = value === null || value === undefined ? "" : String(value);
-    return `"${text.replace(/"/g, '""')}"`;
-  };
+  const escape = escapeCsv;
   const lines = [
     columns.map(escape).join(";"),
     ...rows.map((row) => columns.map((c) => escape(row[c])).join(";")),

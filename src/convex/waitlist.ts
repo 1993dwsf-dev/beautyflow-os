@@ -1,3 +1,4 @@
+import { validateOrgReferences } from "./lib/tenant";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import {
@@ -18,7 +19,7 @@ export const listWaitlist = query({
     staffId: v.optional(v.id("staff")),
   },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "appointments.view");
     if (!member) return [];
     const rows = await ctx.db
       .query("waitlistEntries")
@@ -68,6 +69,7 @@ export const createWaitlistEntry = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "appointments.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     if (toMinutes(args.timeTo) <= toMinutes(args.timeFrom)) {
       throw new AppError("VALIDATION", "O horário final da preferência deve ser depois do inicial.");
     }
@@ -111,6 +113,7 @@ export const updateWaitlistStatus = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "appointments.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const entry = await ctx.db.get(args.entryId);
     if (!entry || entry.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
@@ -142,6 +145,7 @@ export const deleteWaitlistEntry = mutation({
   args: { orgId: v.id("organizations"), entryId: v.id("waitlistEntries") },
   handler: async (ctx, args) => {
     await requireMember(ctx, args.orgId, "appointments.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const entry = await ctx.db.get(args.entryId);
     if (!entry || entry.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
@@ -164,6 +168,7 @@ export const matchesForSlot = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "appointments.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const rows = await ctx.db
       .query("waitlistEntries")
       .withIndex("by_org", (q) => q.eq("orgId", args.orgId))

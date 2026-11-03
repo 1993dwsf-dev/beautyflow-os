@@ -591,7 +591,12 @@ const schema = defineSchema(
       .index("by_org_status", ["orgId", "status"])
       .index("by_client", ["clientId", "issueDate"]),
 
+    photoUploads: defineTable({
+      orgId: v.id("organizations"), storageId: v.id("_storage"), uploadedBy: v.id("users"), createdAt: v.number(),
+    }).index("by_storage", ["storageId"]),
+
     payments: defineTable({
+      refundOf: v.optional(v.id("payments")),
       orgId: v.id("organizations"),
       clientId: v.id("clients"),
       invoiceId: v.optional(v.id("invoices")),

@@ -129,6 +129,8 @@ export function Settings() {
 
   useEffect(() => {
     if (!org) return;
+    // Settings arrive from Convex after the first render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setForm({
       name: org.name ?? "",
       legalName: org.legalName ?? "",
@@ -1238,7 +1240,7 @@ function MembersPanel({ orgId }: { orgId: Id<"organizations"> }) {
         onOpenChange={setOpen}
         size="lg"
         title="Adicionar usuário"
-        description="O acesso é liberado quando a pessoa entra com este e-mail."
+        description="Peça à pessoa para criar sua conta e copiar o código no menu do perfil. Informe o código abaixo para liberar o acesso."
         submitLabel="Adicionar"
         error={error}
         onSubmit={async () => {
@@ -1263,9 +1265,9 @@ function MembersPanel({ orgId }: { orgId: Id<"organizations"> }) {
           <Field label="Nome *">
             <Input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
           </Field>
-          <Field label="E-mail *">
+          <Field label="Código da conta *">
             <Input
-              type="email"
+              type="text"
               value={form.email}
               onChange={(event) => setForm({ ...form, email: event.target.value })}
             />
@@ -1331,6 +1333,7 @@ function MembersPanel({ orgId }: { orgId: Id<"organizations"> }) {
 export function Audit() {
   const { orgId, can } = useApp();
   const [limit, setLimit] = useState("100");
+  const [sevenDaysAgo] = useState(() => Date.now() - 7 * 86_400_000);
   const logs = useQuery(
     api.orgs.listAuditLogs,
     orgId ? { orgId, limit: Number(limit) || 100 } : "skip",
@@ -1360,7 +1363,7 @@ export function Audit() {
         <StatCard
           label="Últimos 7 dias"
           value={
-            logs.filter((log: any) => log.createdAt >= Date.now() - 7 * 86_400_000).length
+            logs.filter((log: any) => log.at >= sevenDaysAgo).length
           }
           tone="info"
         />

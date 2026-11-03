@@ -1,3 +1,4 @@
+import { validateOrgReferences } from "./lib/tenant";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
@@ -481,7 +482,7 @@ export const setFeatureFlag = mutation({
 export const listMembers = query({
   args: { orgId: v.id("organizations") },
   handler: async (ctx, { orgId }) => {
-    const member = await getMembership(ctx, orgId);
+    const member = await getMembership(ctx, orgId, "users.manage");
     if (!member) return [];
     const rows = await ctx.db
       .query("organizationMembers")
@@ -509,14 +510,12 @@ export const addMemberByEmail = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "users.manage");
+    await validateOrgReferences(ctx, args.orgId, args);
+    if (member.role !== "owner") throw new AppError("FORBIDDEN", ERR.PERMISSION);
     const email = args.email.trim().toLowerCase();
-    if (!email.includes("@")) {
-      throw new AppError("VALIDATION", "Informe um e-mail válido.");
-    }
-    const user = await ctx.db
-      .query("users")
-      .withIndex("email", (q) => q.eq("email", email))
-      .first();
+    const accountId = ctx.db.normalizeId("users", args.email.trim());
+    const user = accountId ? await ctx.db.get(accountId) : await ctx.db.query("users").withIndex("email", q => q.eq("email", email)).first();
+    if (user && !accountId && !user.emailVerificationTime) throw new AppError("VALIDATION", "Use o código da conta da pessoa, disponível no menu do perfil. O e-mail desta conta não foi verificado.");
     if (!user) {
       throw new AppError(
         "VALIDATION",
@@ -536,7 +535,7 @@ export const addMemberByEmail = mutation({
       orgId: args.orgId,
       userId: user._id,
       name: args.name || user.name || email,
-      email,
+      email: user.email,
       role: args.role,
       extraPermissions: args.extraPermissions,
       active: true,
@@ -578,7 +577,8 @@ export const updateMember = mutation({
     if (!target || target.orgId !== orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
     }
-    if (target.role === "owner" && patch.role && patch.role !== "owner") {
+    if (member.role !== "owner") throw new AppError("FORBIDDEN", ERR.PERMISSION);
+    if (target.role === "owner" && (patch.active === false || (patch.role && patch.role !== "owner"))) {
       const owners = (
         await ctx.db
           .query("organizationMembers")
@@ -618,6 +618,11 @@ export const removeMember = mutation({
     if (!target || target.orgId !== orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
     }
+    if (member.role !== "owner") throw new AppError("FORBIDDEN", ERR.PERMISSION);
+    if (target.role === "owner" && target.active) {
+      const owners = (await ctx.db.query("organizationMembers").withIndex("by_org", q => q.eq("orgId", orgId)).collect()).filter(m => m.role === "owner" && m.active);
+      if (owners.length <= 1) throw new AppError("VALIDATION", "Mantenha pelo menos uma pessoa proprietária ativa.");
+    }
     if (target._id === member._id) {
       throw new AppError(
         "VALIDATION",
@@ -640,7 +645,7 @@ export const removeMember = mutation({
 export const listAuditLogs = query({
   args: { orgId: v.id("organizations"), limit: v.optional(v.number()) },
   handler: async (ctx, { orgId, limit }) => {
-    const member = await getMembership(ctx, orgId);
+    const member = await getMembership(ctx, orgId, "settings.edit");
     if (!member) return [];
     const rows = await ctx.db
       .query("auditLogs")
@@ -668,6 +673,8 @@ export const markNotificationRead = mutation({
   args: { orgId: v.id("organizations"), id: v.id("notifications") },
   handler: async (ctx, { orgId, id }) => {
     await requireMember(ctx, orgId, "appointments.view");
+    const notification = await ctx.db.get(id);
+    if (!notification || notification.orgId !== orgId) throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
     await ctx.db.patch(id, { read: true });
     return true;
   },

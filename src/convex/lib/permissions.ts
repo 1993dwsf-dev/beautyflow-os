@@ -79,7 +79,7 @@ const READ_ONLY: Permission[] = [
 
 export const ROLE_PERMISSIONS: Record<OrgRole, Permission[]> = {
   owner: ALL,
-  admin: ALL.filter((p) => p !== "users.manage" || true),
+  admin: ALL.filter((p) => p !== "users.manage"),
   receptionist: [
     "clients.view",
     "clients.edit",
@@ -170,7 +170,7 @@ export function permissionsFor(
   role: OrgRole,
   extra: string[] = [],
 ): Permission[] {
-  const base = ROLE_PERMISSIONS[role] ?? READ_ONLY;
+  const base = ROLE_PERMISSIONS[role] ?? [];
   const extras = extra.filter((p): p is Permission =>
     (PERMISSIONS as readonly string[]).includes(p),
   );

@@ -1,3 +1,4 @@
+import { validateOrgReferences } from "./lib/tenant";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
@@ -21,7 +22,7 @@ const BASIS_LABELS: Record<string, string> = {
 export const listCommissionRules = query({
   args: { orgId: v.id("organizations") },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "commissions.view");
     if (!member) return [];
     const rules = await ctx.db
       .query("commissionRules")
@@ -59,6 +60,7 @@ export const saveCommissionRule = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "commissions.pay");
+    await validateOrgReferences(ctx, args.orgId, args);
     if (!args.name.trim()) throw new AppError("VALIDATION", "Informe o nome da regra.");
     if (args.value < 0) throw new AppError("VALIDATION", "O valor da regra não pode ser negativo.");
     if (args.scope === "service" && !args.serviceId) {
@@ -105,6 +107,7 @@ export const deleteCommissionRule = mutation({
   args: { orgId: v.id("organizations"), ruleId: v.id("commissionRules") },
   handler: async (ctx, args) => {
     await requireMember(ctx, args.orgId, "commissions.pay");
+    await validateOrgReferences(ctx, args.orgId, args);
     const rule = await ctx.db.get(args.ruleId);
     if (!rule || rule.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
@@ -123,7 +126,7 @@ export const listCommissions = query({
     status: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "commissions.view");
     if (!member) return { rows: [], summary: [], gross: 0 };
     let rows = await ctx.db
       .query("commissions")
@@ -183,7 +186,7 @@ export const listCommissions = query({
 export const listStatements = query({
   args: { orgId: v.id("organizations"), staffId: v.optional(v.id("staff")) },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "commissions.view");
     if (!member) return [];
     let rows = await ctx.db
       .query("commissionStatements")
@@ -217,6 +220,7 @@ export const generateStatement = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "commissions.pay");
+    await validateOrgReferences(ctx, args.orgId, args);
     const staff = await ctx.db.get(args.staffId);
     if (!staff || staff.orgId !== args.orgId) {
       throw new AppError("VALIDATION", "Profissional não encontrada.");
@@ -279,6 +283,7 @@ export const payStatement = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "commissions.pay");
+    await validateOrgReferences(ctx, args.orgId, args);
     const statement = await ctx.db.get(args.statementId);
     if (!statement || statement.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
@@ -325,7 +330,7 @@ export const payStatement = mutation({
 export const statementDetail = query({
   args: { orgId: v.id("organizations"), statementId: v.id("commissionStatements") },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "commissions.view");
     if (!member) return null;
     const statement = await ctx.db.get(args.statementId);
     if (!statement || statement.orgId !== args.orgId) return null;
@@ -352,6 +357,7 @@ export const addTip = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "commissions.pay");
+    await validateOrgReferences(ctx, args.orgId, args);
     if (args.amount <= 0) throw new AppError("VALIDATION", "O valor da gorjeta deve ser maior que zero.");
     const id = await ctx.db.insert("commissions", {
       orgId: args.orgId,
@@ -396,6 +402,7 @@ export const simulateCommission = mutation({
     ruleLabel: string;
   }> => {
     await requireMember(ctx, args.orgId, "commissions.view");
+    await validateOrgReferences(ctx, args.orgId, args);
     const org = await ctx.db.get(args.orgId);
     const staff = await ctx.db.get(args.staffId);
     const service = await ctx.db.get(args.serviceId);

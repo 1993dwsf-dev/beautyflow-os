@@ -1,3 +1,4 @@
+import { validateOrgReferences } from "./lib/tenant";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -74,13 +75,14 @@ export const listPayments = query({
     clientId: v.optional(v.id("clients")),
   },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "payments.view");
     if (!member) return { rows: [], totals: {} };
     let rows: Doc<"payments">[];
     if (args.clientId) {
       rows = await ctx.db
         .query("payments")
         .withIndex("by_client", (q) => q.eq("clientId", args.clientId!))
+        .filter(q => q.eq(q.field("orgId"), args.orgId))
         .collect();
     } else {
       rows = await ctx.db
@@ -144,6 +146,7 @@ export const createPayment = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "payments.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     await assertFeature(ctx, args.orgId, "finance");
     if (args.amount <= 0) {
       throw new AppError("VALIDATION", "O valor do pagamento deve ser maior que zero.");
@@ -151,6 +154,18 @@ export const createPayment = mutation({
     const org = await ctx.db.get(args.orgId);
     const date = args.date ?? todayInTz(org?.timezone);
     const kind = args.kind ?? "pagamento";
+    if (!["pagamento", "sinal"].includes(kind) || !Number.isSafeInteger(args.amount)) throw new AppError("VALIDATION", "Informe um pagamento válido em centavos.");
+    if (args.invoiceId) {
+      const inv = await ctx.db.get(args.invoiceId);
+      if (!inv || inv.clientId !== args.clientId || inv.status === "cancelled" || inv.status === "draft") throw new AppError("VALIDATION", "Fatura inválida para este cliente.");
+      if (args.appointmentId && inv.appointmentId !== args.appointmentId) throw new AppError("VALIDATION", "Atendimento incompatível com a fatura.");
+      const outstanding = inv.total - await paidForInvoice(ctx, args.invoiceId);
+      if (args.amount > outstanding) throw new AppError("VALIDATION", "O pagamento excede o saldo da fatura.");
+    }
+    if (args.appointmentId) {
+      const apt = await ctx.db.get(args.appointmentId);
+      if (!apt || apt.clientId !== args.clientId) throw new AppError("VALIDATION", "Atendimento inválido para este cliente.");
+    }
 
     // duplicate-submission guard
     const recent = (
@@ -174,7 +189,7 @@ export const createPayment = mutation({
       );
     }
 
-    let amount = args.amount;
+    const amount = args.amount;
 
     // gift card redemption
     if (args.method === "gift_card") {
@@ -306,6 +321,7 @@ export const applyDepositToInvoice = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "payments.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const inv = await ctx.db.get(args.invoiceId);
     const payment = await ctx.db.get(args.paymentId);
     if (!inv || inv.orgId !== args.orgId) {
@@ -314,6 +330,7 @@ export const applyDepositToInvoice = mutation({
     if (!payment || payment.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
     }
+    if (payment.clientId !== inv.clientId || payment.kind !== "sinal" || inv.status === "cancelled" || payment.amount > inv.total - await paidForInvoice(ctx, args.invoiceId)) throw new AppError("VALIDATION", "Sinal incompatível com esta fatura.");
     if (payment.invoiceId) {
       throw new AppError(
         "CONFLICT",
@@ -357,11 +374,13 @@ export const refundPayment = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "payments.refund");
+    await validateOrgReferences(ctx, args.orgId, args);
     const original = await ctx.db.get(args.paymentId);
     if (!original || original.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
     }
-    if (args.amount <= 0 || args.amount > original.amount) {
+    const refunded = (await ctx.db.query("payments").withIndex("by_org", q => q.eq("orgId", args.orgId)).collect()).filter(p => p.refundOf === args.paymentId).reduce((n, p) => n + p.amount, 0);
+    if (original.kind === "reembolso" || !Number.isSafeInteger(args.amount) || args.amount <= 0 || args.amount > original.amount - refunded) {
       throw new AppError(
         "VALIDATION",
         "O valor do estorno deve ser maior que zero e não pode superar o valor pago.",
@@ -380,6 +399,7 @@ export const refundPayment = mutation({
       amount: args.amount,
       method: args.method ?? original.method,
       kind: "reembolso",
+      refundOf: args.paymentId,
       date,
       reference: original.reference,
       notes: args.reason,
@@ -426,6 +446,7 @@ export const deletePayment = mutation({
   args: { orgId: v.id("organizations"), paymentId: v.id("payments") },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "payments.refund");
+    await validateOrgReferences(ctx, args.orgId, args);
     const payment = await ctx.db.get(args.paymentId);
     if (!payment || payment.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
@@ -457,7 +478,7 @@ export const deletePayment = mutation({
 export const listAccounts = query({
   args: { orgId: v.id("organizations") },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "payments.view");
     if (!member) return [];
     const accounts = await ctx.db
       .query("financialAccounts")
@@ -507,6 +528,7 @@ export const saveAccount = mutation({
   },
   handler: async (ctx, args) => {
     const { member } = await requireMember(ctx, args.orgId, "expenses.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const payload = {
       orgId: args.orgId,
       name: args.name,
@@ -540,7 +562,7 @@ export const listExpenses = query({
     supplierId: v.optional(v.id("suppliers")),
   },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "expenses.view");
     if (!member) return { rows: [], totals: { paid: 0, pending: 0, all: 0, byCategory: [] } };
     let rows = await ctx.db
       .query("expenses")
@@ -604,6 +626,7 @@ export const saveExpense = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "expenses.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     if (args.amount <= 0) {
       throw new AppError("VALIDATION", "O valor da despesa deve ser maior que zero.");
     }
@@ -669,6 +692,7 @@ export const payExpense = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "expenses.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const expense = await ctx.db.get(args.expenseId);
     if (!expense || expense.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
@@ -699,6 +723,7 @@ export const deleteExpense = mutation({
   args: { orgId: v.id("organizations"), expenseId: v.id("expenses") },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "expenses.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const expense = await ctx.db.get(args.expenseId);
     if (!expense || expense.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
@@ -721,6 +746,7 @@ export const generateRecurringExpenses = mutation({
   args: { orgId: v.id("organizations"), month: v.string() },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "expenses.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const rows = await ctx.db
       .query("expenses")
       .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
@@ -766,7 +792,7 @@ export const generateRecurringExpenses = mutation({
 export const cashFlow = query({
   args: { orgId: v.id("organizations"), months: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "reports.financial");
     if (!member) return [];
     const months = args.months ?? 6;
     const payments = await ctx.db

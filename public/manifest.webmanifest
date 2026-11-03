@@ -1,11 +1,11 @@
 {
-  "name": "freebuff.com application",
-  "short_name": "freebuff.com",
-  "description": "freebuff.com application",
+  "name": "BeautyFlow OS",
+  "short_name": "BeautyFlow",
+  "description": "Gestão de salões e estúdios de beleza",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#000000",
+  "theme_color": "#0e7475",
   "icons": [
     {
       "src": "/logo.svg",
@@ -13,5 +13,6 @@
       "type": "image/svg+xml",
       "purpose": "any"
     }
-  ]
+  ],
+  "lang": "pt-BR"
 }

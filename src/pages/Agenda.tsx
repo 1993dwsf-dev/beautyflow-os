@@ -60,7 +60,7 @@ import {
   UserCheck,
   XCircle,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 
@@ -72,14 +72,11 @@ export default function Agenda() {
   const [view, setView] = useState<"dia" | "semana" | "lista">("dia");
   const [date, setDate] = useState(context?.today ?? todayISO());
   const [staffFilter, setStaffFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState(params.get("status") ?? "all");
+  const statusFilter = params.get("status") ?? "all";
   const [search, setSearch] = useState("");
   const [newOpen, setNewOpen] = useState(false);
   const [detailId, setDetailId] = useState<Id<"appointments"> | null>(null);
 
-  useEffect(() => {
-    setStatusFilter(params.get("status") ?? "all");
-  }, [params]);
 
   const range = useMemo(() => {
     if (view === "dia") return { from: date, to: date };
@@ -211,7 +208,6 @@ export default function Agenda() {
           <Select
             value={statusFilter}
             onValueChange={(value) => {
-              setStatusFilter(value);
               const next = new URLSearchParams(params);
               if (value === "all") next.delete("status");
               else next.set("status", value);

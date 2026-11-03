@@ -82,6 +82,7 @@ export async function getUserId(ctx: Ctx): Promise<Id<"users"> | null> {
 export async function getMembership(
   ctx: Ctx,
   orgId: Id<"organizations">,
+  permission?: Permission,
 ): Promise<Doc<"organizationMembers"> | null> {
   const userId = await getUserId(ctx);
   if (!userId) return null;
@@ -90,6 +91,7 @@ export async function getMembership(
     .withIndex("by_org_user", (q) => q.eq("orgId", orgId).eq("userId", userId))
     .first();
   if (!member || !member.active) return null;
+  if (permission && ((permission === "users.manage" && member.role !== "owner") || !hasPermission(member.role as OrgRole, permission, member.extraPermissions))) return null;
   return member;
 }
 
@@ -109,7 +111,7 @@ export async function requireMember(
   if (!member) throw new AppError("FORBIDDEN", ERR.NOT_MEMBER);
   if (
     permission &&
-    !hasPermission(member.role as OrgRole, permission, member.extraPermissions)
+    ((permission === "users.manage" && member.role !== "owner") || !hasPermission(member.role as OrgRole, permission, member.extraPermissions))
   ) {
     throw new AppError("FORBIDDEN", ERR.PERMISSION);
   }

@@ -1,8 +1,10 @@
+import { validateOrgReferences } from "./lib/tenant";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
   AppError,
+  hasPermission,
   ERR,
   addDaysISO,
   diffDaysISO,
@@ -118,7 +120,7 @@ async function clientMetrics(
         .map((al: any) => al.amount),
     );
     const m = map.get(inv.clientId as string)!;
-    m.outstanding += Math.max(0, inv.total - paid - inv.depositApplied + 0);
+    m.outstanding += Math.max(0, inv.total - paid);
   }
 
   const records = await ctx.db
@@ -162,7 +164,7 @@ export const listClients = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "clients.view");
     if (!member) return { rows: [], tags: [] as string[], total: 0 };
     let rows: Doc<"clients">[] = await ctx.db
       .query("clients")
@@ -176,7 +178,7 @@ export const listClients = query({
       rows = rows.filter(
         (r) =>
           r.name.toLowerCase().includes(search) ||
-          r.phone.replace(/\D/g, "").includes(search.replace(/\D/g, "")) ||
+          (Boolean(search.replace(/\D/g, "")) && r.phone.replace(/\D/g, "").includes(search.replace(/\D/g, ""))) ||
           (r.email ?? "").toLowerCase().includes(search),
       );
     }
@@ -211,7 +213,7 @@ export const listClients = query({
 export const getClient = query({
   args: { orgId: v.id("organizations"), clientId: v.id("clients") },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "clients.view");
     if (!member) return null;
     const client = await ctx.db.get(args.clientId);
     if (!client || client.orgId !== args.orgId) return null;
@@ -222,6 +224,7 @@ export const getClient = query({
       await ctx.db
         .query("appointments")
         .withIndex("by_client", (q) => q.eq("clientId", args.clientId))
+        .filter(q => q.eq(q.field("orgId"), args.orgId))
         .collect()
     ).sort((a, b) => (a.date < b.date ? 1 : -1));
 
@@ -229,6 +232,7 @@ export const getClient = query({
       await ctx.db
         .query("payments")
         .withIndex("by_client", (q) => q.eq("clientId", args.clientId))
+        .filter(q => q.eq(q.field("orgId"), args.orgId))
         .collect()
     ).sort((a, b) => (a.date < b.date ? 1 : -1));
 
@@ -236,6 +240,7 @@ export const getClient = query({
       await ctx.db
         .query("invoices")
         .withIndex("by_client", (q) => q.eq("clientId", args.clientId))
+        .filter(q => q.eq(q.field("orgId"), args.orgId))
         .collect()
     ).sort((a, b) => (a.issueDate < b.issueDate ? 1 : -1));
 
@@ -243,23 +248,27 @@ export const getClient = query({
       await ctx.db
         .query("treatmentRecords")
         .withIndex("by_client", (q) => q.eq("clientId", args.clientId))
+        .filter(q => q.eq(q.field("orgId"), args.orgId))
         .collect()
     ).sort((a, b) => (a.date < b.date ? 1 : -1));
 
     const consent = await ctx.db
       .query("consentRecords")
       .withIndex("by_client", (q) => q.eq("clientId", args.clientId))
-      .collect();
+      .filter(q => q.eq(q.field("orgId"), args.orgId))
+        .collect();
 
     const responses = await ctx.db
       .query("consultationResponses")
       .withIndex("by_client", (q) => q.eq("clientId", args.clientId))
-      .collect();
+      .filter(q => q.eq(q.field("orgId"), args.orgId))
+        .collect();
 
     const photos = await ctx.db
       .query("clientPhotos")
       .withIndex("by_client", (q) => q.eq("clientId", args.clientId))
-      .collect();
+      .filter(q => q.eq(q.field("orgId"), args.orgId))
+        .collect();
 
     const loyalty = await ctx.db
       .query("loyaltyAccounts")
@@ -270,6 +279,7 @@ export const getClient = query({
       await ctx.db
         .query("loyaltyTransactions")
         .withIndex("by_client", (q) => q.eq("clientId", args.clientId))
+        .filter(q => q.eq(q.field("orgId"), args.orgId))
         .collect()
     ).sort((a, b) => b.createdAt - a.createdAt);
 
@@ -279,12 +289,12 @@ export const getClient = query({
       client,
       metrics: metrics.get(args.clientId as string)!,
       appointments,
-      payments,
-      invoices,
-      records,
-      consent,
-      responses,
-      photos,
+      payments: hasPermission(member.role, "payments.view", member.extraPermissions) ? payments : [],
+      invoices: hasPermission(member.role, "invoices.view", member.extraPermissions) ? invoices : [],
+      records: hasPermission(member.role, "health.view", member.extraPermissions) ? records : [],
+      consent: hasPermission(member.role, "consent.view", member.extraPermissions) ? consent : [],
+      responses: hasPermission(member.role, "health.view", member.extraPermissions) ? responses : [],
+      photos: hasPermission(member.role, "photos.view", member.extraPermissions) ? photos : [],
       loyalty: loyalty ?? null,
       loyaltyLedger,
       servicesPurchased: serviceNames,
@@ -312,6 +322,7 @@ export const createClient = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "clients.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     if (!args.name.trim()) throw new AppError("VALIDATION", "Informe o nome da cliente.");
     if (!args.phone.trim()) throw new AppError("VALIDATION", "Informe o telefone da cliente.");
 
@@ -413,6 +424,7 @@ export const updateClient = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "clients.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const client = await ctx.db.get(args.clientId);
     if (!client || client.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
@@ -436,6 +448,7 @@ export const deleteClientData = mutation({
   args: { orgId: v.id("organizations"), clientId: v.id("clients") },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "settings.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const client = await ctx.db.get(args.clientId);
     if (!client || client.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
@@ -443,7 +456,8 @@ export const deleteClientData = mutation({
     const appointments = await ctx.db
       .query("appointments")
       .withIndex("by_client", (q) => q.eq("clientId", args.clientId))
-      .collect();
+      .filter(q => q.eq(q.field("orgId"), args.orgId))
+        .collect();
     if (appointments.length) {
       throw new AppError(
         "VALIDATION",
@@ -480,7 +494,7 @@ export const deleteClientData = mutation({
 export const clientSuggestions = query({
   args: { orgId: v.id("organizations") },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "clients.view");
     if (!member) return [];
     const rows = await ctx.db
       .query("clients")
@@ -497,7 +511,7 @@ export const clientSuggestions = query({
 export const upcomingBirthdays = query({
   args: { orgId: v.id("organizations"), days: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "clients.view");
     if (!member) return [];
     const clients = await ctx.db
       .query("clients")
@@ -524,7 +538,7 @@ export const upcomingBirthdays = query({
 export const clientOptions = query({
   args: { orgId: v.id("organizations") },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "clients.view");
     if (!member) return [];
     return await ctx.db
       .query("clients")

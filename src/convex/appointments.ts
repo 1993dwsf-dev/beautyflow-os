@@ -1,8 +1,10 @@
+import { validateOrgReferences } from "./lib/tenant";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
   AppError,
+  hasPermission,
   ERR,
   assertFeature,
   currentMonth,
@@ -46,7 +48,7 @@ export const availability = query({
     enforceLeadTime: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "appointments.view");
     if (!member) return { slots: [], closed: false, weekday: 0 };
     const org = await loadOrg(ctx, args.orgId);
     const services: Doc<"services">[] = [];
@@ -100,7 +102,7 @@ export const listAppointments = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "appointments.view");
     if (!member)
       return { rows: [], counts: {}, total: 0, revenue: 0 };
 
@@ -109,6 +111,7 @@ export const listAppointments = query({
       rows = await ctx.db
         .query("appointments")
         .withIndex("by_client", (q) => q.eq("clientId", args.clientId!))
+        .filter(q => q.eq(q.field("orgId"), args.orgId))
         .collect();
     } else {
       const from = args.from ?? "0000-01-01";
@@ -140,7 +143,7 @@ export const listAppointments = query({
         const c = clientMap.get(a.clientId as string);
         return (
           (c?.name ?? "").toLowerCase().includes(q) ||
-          (c?.phone ?? "").replace(/\D/g, "").includes(q.replace(/\D/g, ""))
+          (Boolean(q.replace(/\D/g, "")) && (c?.phone ?? "").replace(/\D/g, "").includes(q.replace(/\D/g, "")))
         );
       });
     }
@@ -177,7 +180,7 @@ export const listAppointments = query({
 export const appointmentDetail = query({
   args: { orgId: v.id("organizations"), appointmentId: v.id("appointments") },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "appointments.view");
     if (!member) return null;
     const apt = await ctx.db.get(args.appointmentId);
     if (!apt || apt.orgId !== args.orgId) return null;
@@ -220,8 +223,8 @@ export const appointmentDetail = query({
       payments,
       invoices,
       history: history.sort((a, b) => b.at - a.at),
-      records,
-      commissions,
+      records: hasPermission(member.role, "health.view", member.extraPermissions) ? records : [],
+      commissions: hasPermission(member.role, "commissions.view", member.extraPermissions) ? commissions : [],
       paid: sum(allocations.filter((a) => a.kind !== "reembolso").map((a) => a.amount)),
       depositPaid: sum(
         payments.filter((p) => p.kind === "sinal" && p.amount > 0).map((p) => p.amount),
@@ -247,6 +250,7 @@ export const createAppointment = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "appointments.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     return await createAppointmentRef(ctx, {
       orgId: args.orgId,
       clientId: args.clientId,
@@ -281,11 +285,13 @@ export const rescheduleAppointment = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "appointments.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const org = await loadOrg(ctx, args.orgId);
     const apt = await ctx.db.get(args.appointmentId);
     if (!apt || apt.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
     }
+    if (["cancelled", "no_show"].includes(apt.status)) throw new AppError("VALIDATION", "Este atendimento está cancelado ou não compareceu.");
     if (apt.status === "completed") {
       throw new AppError(
         "VALIDATION",
@@ -363,11 +369,13 @@ export const setAppointmentStatus = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "appointments.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const apt = await ctx.db.get(args.appointmentId);
     if (!apt || apt.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
     }
     if (apt.status === args.status) return true;
+    if (apt.status === "completed") throw new AppError("LOCKED", "Atendimento concluído não pode ser reaberto. Crie um novo agendamento.");
 
     if (args.status === "completed") {
       throw new AppError(
@@ -412,10 +420,12 @@ export const deleteAppointment = mutation({
   args: { orgId: v.id("organizations"), appointmentId: v.id("appointments") },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "appointments.delete");
+    await validateOrgReferences(ctx, args.orgId, args);
     const apt = await ctx.db.get(args.appointmentId);
     if (!apt || apt.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
     }
+    if (apt.status === "completed") throw new AppError("LOCKED", "Atendimento concluído precisa ser preservado no histórico.");
     const invoices = await ctx.db
       .query("invoices")
       .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
@@ -464,10 +474,12 @@ export const completeAppointment = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "appointments.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const apt = await ctx.db.get(args.appointmentId);
     if (!apt || apt.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
     }
+    if (["cancelled", "no_show"].includes(apt.status)) throw new AppError("VALIDATION", "Este atendimento está cancelado ou não compareceu.");
     if (apt.status === "completed") {
       throw new AppError(
         "CONFLICT",

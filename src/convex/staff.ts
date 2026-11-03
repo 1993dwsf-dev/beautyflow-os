@@ -1,3 +1,4 @@
+import { validateOrgReferences } from "./lib/tenant";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import {
@@ -25,7 +26,7 @@ const COLORS = [
 export const listStaff = query({
   args: { orgId: v.id("organizations"), includeInactive: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "staff.view");
     if (!member) return [];
     const rows = await ctx.db
       .query("staff")
@@ -68,7 +69,7 @@ export const listStaff = query({
 export const staffOptions = query({
   args: { orgId: v.id("organizations") },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "staff.view");
     if (!member) return [];
     const rows = await ctx.db
       .query("staff")
@@ -116,6 +117,7 @@ export const createStaff = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "staff.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     if (!args.name.trim()) throw new AppError("VALIDATION", "Informe o nome da profissional.");
     if (toMinutes(args.workEnd) <= toMinutes(args.workStart)) {
       throw new AppError(
@@ -209,6 +211,7 @@ export const updateStaff = mutation({
   },
   handler: async (ctx, args) => {
     const { userId, member } = await requireMember(ctx, args.orgId, "staff.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const staff = await ctx.db.get(args.staffId);
     if (!staff || staff.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
@@ -250,7 +253,7 @@ export const updateStaff = mutation({
 export const staffAvailability = query({
   args: { orgId: v.id("organizations"), staffId: v.id("staff") },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "staff.view");
     if (!member) return [];
     const rows = await ctx.db
       .query("staffAvailability")
@@ -273,6 +276,7 @@ export const setAvailabilityDay = mutation({
   },
   handler: async (ctx, args) => {
     const { member } = await requireMember(ctx, args.orgId, "staff.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const staff = await ctx.db.get(args.staffId);
     if (!staff || staff.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
@@ -309,13 +313,14 @@ export const listBlocks = query({
     to: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "staff.view");
     if (!member) return [];
     let rows;
     if (args.staffId) {
       rows = await ctx.db
         .query("staffBlocks")
         .withIndex("by_staff_date", (q) => q.eq("staffId", args.staffId!))
+        .filter(q => q.eq(q.field("orgId"), args.orgId))
         .collect();
     } else {
       rows = await ctx.db
@@ -340,6 +345,7 @@ export const createBlock = mutation({
   },
   handler: async (ctx, args) => {
     const { member } = await requireMember(ctx, args.orgId, "staff.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     if (toMinutes(args.end) <= toMinutes(args.start)) {
       throw new AppError("VALIDATION", "O horário final do bloqueio precisa ser depois do inicial.");
     }
@@ -367,6 +373,7 @@ export const deleteBlock = mutation({
   args: { orgId: v.id("organizations"), blockId: v.id("staffBlocks") },
   handler: async (ctx, args) => {
     await requireMember(ctx, args.orgId, "staff.edit");
+    await validateOrgReferences(ctx, args.orgId, args);
     const block = await ctx.db.get(args.blockId);
     if (!block || block.orgId !== args.orgId) {
       throw new AppError("NOT_FOUND", ERR.NOT_FOUND);
@@ -384,7 +391,7 @@ export const staffPerformance = query({
     to: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const member = await getMembership(ctx, args.orgId);
+    const member = await getMembership(ctx, args.orgId, "staff.view");
     if (!member) return [];
     const staff = await ctx.db
       .query("staff")

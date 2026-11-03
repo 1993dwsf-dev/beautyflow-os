@@ -84,11 +84,12 @@ export async function createAppointmentRef(
     services,
     date: args.date,
     startMinutes,
+    enforceLeadTime: args.enforceLeadTime,
   });
 
   const subtotal = sum(items.map((i) => i.total));
   const discount = args.discount ?? 0;
-  if (discount > subtotal) {
+  if (!Number.isSafeInteger(discount) || discount < 0 || discount > subtotal) {
     throw new AppError(
       "VALIDATION",
       "O desconto não pode ser maior que o valor total dos serviços.",

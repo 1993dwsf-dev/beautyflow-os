@@ -433,6 +433,7 @@ function UserMenu() {
           </span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <DropdownMenuLabel className="max-w-72 text-xs font-normal break-all">Código da sua conta: {user?._id}</DropdownMenuLabel>
         <DropdownMenuItem onClick={() => navigate("/app/configuracoes")}>
           <Settings className="mr-2 size-4" />
           Configurações

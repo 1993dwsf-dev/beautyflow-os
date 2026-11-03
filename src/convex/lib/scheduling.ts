@@ -155,13 +155,22 @@ export async function assertBookable(
     startMinutes: number;
     ignoreAppointmentId?: Id<"appointments">;
     skipPastCheck?: boolean;
+    enforceLeadTime?: boolean;
   },
 ): Promise<{ endMinutes: number; duration: number; buffer: number }> {
   const { org, staff, services, date, startMinutes } = args;
   if (!services.length) {
     throw new AppError("VALIDATION", "Selecione pelo menos um serviço.");
   }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isInteger(startMinutes) || startMinutes < 0 || startMinutes >= 1440) throw new AppError("VALIDATION", "Data ou horário inválido.");
+  if (!staff.active || services.some(s => !s.active)) throw new AppError("UNAVAILABLE", "Profissional ou serviço inativo.");
+  if (services.some(s => s.eligibleStaff.length && !s.eligibleStaff.includes(staff._id))) throw new AppError("UNAVAILABLE", "Esta profissional não realiza o serviço selecionado.");
   const { duration, buffer, block } = requiredMinutes(services);
+  if (args.enforceLeadTime) {
+    const [y, m, d] = date.split("-").map(Number);
+    const slot = Date.UTC(y, m - 1, d) + (startMinutes + 180) * 60000;
+    if (slot - Date.now() < (org.onlineBookingLeadHours ?? 24) * 3600000) throw new AppError("LEAD_TIME", "Respeite a antecedência mínima para agendar online.");
+  }
 
   const weekday = weekdayOf(date);
   const open = org.openHours.find((h) => h.weekday === weekday);
